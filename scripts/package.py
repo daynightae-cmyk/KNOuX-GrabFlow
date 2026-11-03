@@ -3,6 +3,7 @@
 from pathlib import Path
 from zipfile import ZipFile, ZipInfo, ZIP_STORED
 import json
+import os
 import sys
 
 ROOT=Path(__file__).resolve().parent.parent
@@ -14,7 +15,12 @@ FILES=['manifest.json','popup.html','popup.css','popup.js','scan-page.js','asset
 for name in FILES:
     if not (ROOT/name).is_file() or (ROOT/name).is_symlink():
         sys.exit(f'Missing/unsafe: {name}')
-OUT=ROOT.parent/f"KNOuX-GrabFlow-CHROME-v{MANIFEST['version']}.zip"
+DEST=Path(os.environ.get("KNOUX_GRABFLOW_PACKAGE_DIR", str(ROOT.parent))).resolve()
+if not DEST.is_dir():
+    sys.exit(f"Package destination does not exist: {DEST}")
+OUT=DEST/f"KNOuX-GrabFlow-CHROME-v{MANIFEST['version']}.zip"
+if OUT.exists() and os.environ.get("KNOUX_GRABFLOW_PACKAGE_DIR"):
+    sys.exit(f"Refusing to overwrite an existing release artifact: {OUT}")
 with ZipFile(OUT,'w',ZIP_STORED) as archive:
     for name in FILES:
         info=ZipInfo(name,(2026,1,1,0,0,0));info.compress_type=ZIP_STORED

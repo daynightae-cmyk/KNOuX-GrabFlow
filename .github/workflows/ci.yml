@@ -64,9 +64,29 @@ jobs:
         run: |
           python -m pip install 'playwright==1.55.0'
           python -m playwright install --with-deps chromium
+      - name: Ensure FFmpeg/FFprobe for real browser video integrity
+        run: command -v ffmpeg && command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
       - name: Popup browser UI in-memory smoke
         run: python tests/test-ui-inmemory.py
       - name: Popup browser UI smoke (HTTP server)
         run: python tests/test-ui.py
       - name: 20-Fixture Real Browser Matrix E2E Test Suite
         run: python tests/test-e2e-matrix.py
+      - name: Real unpacked Chrome MV3 API and byte-verified download E2E
+        run: python tests/test-real-mv3.py
+
+  native-messaging-windows:
+    name: Real Chrome to Native Messaging handshake (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Chromium browser test runtime
+        run: |
+          python -m pip install 'playwright==1.55.0'
+          python -m playwright install chromium
+      - name: Verify native handshake and isolated registry teardown
+        run: python tests/test-real-native-messaging-win.py

@@ -6,7 +6,7 @@ An independent KNOuX LABS browser extension for discovering, classifying and sav
 
 ---
 
-## What's in v0.6.0 Ultimate Production Edition
+## Current v0.6.1 capabilities and boundaries
 
 - **Chrome MV3 Least Privilege:** Temporary `activeTab` access only upon user invocation. No broad host permissions, no remote code execution, no background activity while idle.
 - **Video-First Media Engine V2:**
@@ -20,18 +20,18 @@ An independent KNOuX LABS browser extension for discovering, classifying and sav
 - **Interactive Companion Stream Assembly:**
   - One-click **⚡ Assemble** button right on HLS/DASH cards when companion is connected.
   - One-click **📋 FFmpeg** command generator when companion is not yet installed.
-  - Real-time tracking of companion assembly jobs inside the Download Manager drawer.
+  - Native companion assembly is currently a one-shot request; true continuous progress and reliable cancellation are not yet verified.
 - **In-Popup Media Preview Drawer:**
   - Instant playable video and audio preview with natural dimension inspection.
   - Safe sandboxed controls and CORS protection indicator.
 - **Real Download Manager:**
   - Drawer integrated into the popup showing live states: `Starting`, `Downloading`, `Completed`, `Interrupted`, `Failed`.
   - Verified byte progress, file size, and error codes.
-  - In-app actions: `Open`, `Folder` (Explorer reveal), `Retry`, `Cancel`, `Clear History`.
+  - Chrome download actions include `Open`, `Folder`, `Retry`, `Cancel`, and `Clear History`; native assembly cancellation is disabled until a reliable persistent bridge is implemented.
 - **Windows Native Media Companion:**
   - Secure Chrome Native Messaging host (`scripts/companion_host.py`) for assembling accessible HLS/DASH streams into MP4/MKV via local FFmpeg.
   - Strict security: argument-array execution (no shell interpolation), SSRF protection against private IP access, no-clobber protection (`-n`).
-  - One-click batch installers: `scripts/install-companion.bat` and `scripts/uninstall-companion.bat`.
+  - Companion installer scripts require the exact installed Chrome extension ID; wildcard registration is not permitted.
 - **VS Code Media Companion Extension (`vscode-companion/`):**
   - Developer extension to inspect media URLs, validate HLS/DASH manifests, and trigger GrabFlow stream assembly from VS Code.
 - **Obsidian Glass 2.0 Design System:**
@@ -41,9 +41,17 @@ An independent KNOuX LABS browser extension for discovering, classifying and sav
 
 ---
 
+## Verified release-candidate boundaries (November 2026)
+
+- Real unpacked Chromium MV3 extension, Arabic/English RTL/LTR, real Chrome Downloads API, byte-verified PNG and playable MP4 with audio/video: locally tested.
+- Actual Chrome Native Messaging host handshake and blocked unsafe browser network-policy override: locally tested with temporary HKCU registration and verified cleanup.
+- HLS master and DASH assembly through the FFmpeg CLI with actual media files: locally tested with controlled fixtures.
+- A physical Chrome toolbar action granting activeTab, and a complete browser-to-native stream assembly producing a finished output, remain **UNVERIFIED**.
+- Chrome/Edge/Opera store submission, review and publication have **NOT** happened yet.
+
 ## Testing & Quality Gates
 
-Run all automated verification suites (77 total automated tests):
+Run the maintained test suites (counts evolve; CI results are authoritative):
 
 ```sh
 # Syntax verification

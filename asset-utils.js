@@ -11,7 +11,7 @@ function filterSortAssets(assets, {type = 'all', query = '', sort = 'page', larg
   return result;
 }
 function safeDownloadName(asset, index, pageDomain) {
-  const allowed = {image: '.png', video: '.mp4', document: '.bin'};
+  const allowed = {image: '.png', video: '.mp4', audio: '.mp3', document: '.bin'};
   const ext = allowed[asset.type] || '.bin';
   let last = '';
   try { last = decodeURIComponent(new URL(asset.url).pathname.split('/').pop() || ''); }

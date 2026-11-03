@@ -14,12 +14,13 @@ function makeNode(attrs = {}, extra = {}) {
     querySelectorAll: selector => (extra.children || {})[selector] || [],
   };
 }
-function run({imgs=[], videos=[], metas=[], links=[], css=[], hostname='example.com', title='Example', url='https://example.com/page'} = {}) {
+function run({imgs=[], videos=[], audios=[], pictures=[], metas=[], links=[], css=[], hostname='example.com', title='Example', url='https://example.com/page'} = {}) {
   const document = {
     baseURI: url, title,
     querySelectorAll: selector => ({
-      'img': imgs, 'video': videos,
-      'meta[property="og:video"],meta[property="og:video:url"],meta[property="og:video:secure_url"]': metas,
+      'img': imgs, 'video': videos, 'audio': audios,
+      'picture source[srcset],picture source[data-srcset]': pictures,
+      'meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"],meta[property="og:video"],meta[property="og:video:url"],meta[property="og:video:secure_url"],meta[property="og:audio"],meta[property="og:audio:secure_url"]': metas,
       'a[href]': links, '[style*="background"]': css,
     })[selector] || []
   };
@@ -54,7 +55,7 @@ test('ignores non-http data, blob, javascript and invalid links', () => {
   assert.equal(page.assets.length, 0);
 });
 test('discovers direct video and files without touching network resources', () => {
-  const vid = makeNode({src:'/promo.mp4', title:'Preview'}, {children:{'source[src]':[makeNode({src:'/backup.webm'})]}});
+  const vid = makeNode({src:'/promo.mp4', title:'Preview'}, {children:{'source[src],source[data-src]':[makeNode({src:'/backup.webm'})]}});
   const page = run({videos:[vid], links:[makeNode({href:'/manual.pdf'},{textContent:'Manual'}),makeNode({href:'/source.zip?dl=1'})]});
   assert.deepEqual(Array.from(page.assets,a=>a.type), ['video','video','document','document']);
   assert.equal(page.assets[2].name,'Manual');
@@ -80,6 +81,29 @@ test('discovers inline CSS background images without fetching them', () => {
 test('discovers directly linked images and blocks URLs with credentials', () => {
   const page = run({links:[makeNode({href:'/gallery.jpg'}), makeNode({href:'https://u:p@evil.test/private.jpg'})]});
   assert.equal(page.assets.length,1); assert.equal(page.assets[0].type,'image');
+});
+test('falls back to real lazy URLs when currentSrc contains a data placeholder', () => {
+  const img=makeNode({'src':'data:image/svg+xml;base64,abcd','data-src':'/photography/hero.webp'},{currentSrc:'data:image/gif;base64,aaa'});
+  const page=run({imgs:[img]});
+  assert.equal(page.assets[0].url, 'https://example.com/photography/hero.webp');
+});
+test('extracts responsive picture source without executing scripts or fetching resources', () => {
+  const page=run({pictures:[makeNode({'srcset':'/small.avif 300w, /large.avif 1200w'})]});
+  assert.equal(page.assets[0].url,'https://example.com/large.avif');
+  assert.equal(page.assets[0].source,'picture');
+});
+test('extracts direct audio players and audio links', () => {
+  const player=makeNode({src:'/podcast.mp3',title:'Episode'},{children:{'source[src],source[data-src]':[makeNode({src:'/mix.flac'})]}});
+  const page=run({audios:[player],links:[makeNode({href:'/music.ogg'})]});
+  assert.deepEqual(Array.from(page.assets, a => a.type), ['audio','audio','audio']);
+});
+test('recognizes OpenGraph images and direct media but rejects player pages', () => {
+  const page=run({metas:[makeNode({property:'og:image',content:'/share.webp'}), makeNode({property:'og:audio',content:'/track.mp3'}),makeNode({property:'og:video',content:'/player?watch=1'})]});
+  assert.deepEqual(Array.from(page.assets, a=>a.type), ['image','audio']);
+});
+test('rejects authenticated URLs and script-like candidate values even inside new formats', () => {
+  const page=run({pictures:[makeNode({srcset:'javascript:alert(1) 3x, data:image/png;base64,zzz 2x'})], audios:[makeNode({src:'https://user:pass@example.com/private.mp3'})]});
+  assert.equal(page.assets.length,0);
 });
 test('records loaded image dimensions for size filtering', () => {
   const img = makeNode({src:'/photo.jpg'}); img.naturalWidth=1920; img.naturalHeight=1080;

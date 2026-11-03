@@ -3,13 +3,13 @@
 const ui = Object.fromEntries([
   'langBtn','refreshBtn','totalCount','pageHost','search','results','selectedLabel',
   'selectVisible','clearSelection','copyBtn','downloadBtn','notice','countAll',
-  'countImage','countVideo','countDocument','sortMode','largeImages','csvBtn'
+  'countImage','countVideo','countAudio','countDocument','sortMode','largeImages','csvBtn'
 ].map(id => [id, document.getElementById(id)]));
 
 const dictionary = {
   en: {
     heroNote: 'LOCAL • PRIVATE • ON DEMAND', detected: 'Assets detected on this page',
-    all: 'All', images: 'Images', videos: 'Video', docs: 'Files',
+    all: 'All', images: 'Images', videos: 'Video', audio: 'Audio', docs: 'Files',
     selectVisible: 'Select visible', clear: 'Clear', copy: 'Copy links', download: 'Download selected',
     privacy: 'No tracking. No uploads. No accounts.', legal: 'Only download content you may use',
     scanning: 'Scanning page…', noAssets: 'No directly accessible assets found on this page.',
@@ -20,13 +20,13 @@ const dictionary = {
     done: (ok, fail) => `Downloads started: ${ok}${fail ? ` · Could not start: ${fail}` : ''}`,
     downloading: (done, total) => `Starting downloads ${done}/${total}…`,
     blocked: 'Some files may be unavailable or require website permission.',
-    typeImage: 'IMAGE', typeVideo: 'VIDEO', typeDocument: 'FILE',
+    typeImage: 'IMAGE', typeVideo: 'VIDEO', typeAudio: 'AUDIO', typeDocument: 'FILE',
     sortBy: 'Sort', pageOrder: 'Page order', sortName: 'Name A–Z', sortType: 'File type',
     largeOnly: 'Large images', exportCsv: 'CSV', csvCopied: 'CSV copied for the visible results.'
   },
   ar: {
     heroNote: 'محلي • خصوصية • عند الطلب', detected: 'ملف قابل للاكتشاف في الصفحة',
-    all: 'الكل', images: 'الصور', videos: 'فيديو', docs: 'ملفات',
+    all: 'الكل', images: 'الصور', videos: 'فيديو', audio: 'صوت', docs: 'ملفات',
     selectVisible: 'تحديد الظاهر', clear: 'إلغاء', copy: 'نسخ الروابط', download: 'تحميل المحدد',
     privacy: 'بدون تتبع أو رفع ملفات أو حساب.', legal: 'حمّل المحتوى المسموح لك فقط',
     scanning: 'جارٍ فحص الصفحة…', noAssets: 'لم يتم اكتشاف ملفات مباشرة قابلة للوصول.',
@@ -37,7 +37,7 @@ const dictionary = {
     done: (ok, fail) => `بدأ تحميل ${ok}${fail ? ` · تعذر بدء ${fail}` : ''}`,
     downloading: (done, total) => `بدء التحميل ${done}/${total}…`,
     blocked: 'قد تتطلب بعض الملفات صلاحيات من الموقع أو تكون غير متاحة.',
-    typeImage: 'صورة', typeVideo: 'فيديو', typeDocument: 'ملف',
+    typeImage: 'صورة', typeVideo: 'فيديو', typeAudio: 'صوت', typeDocument: 'ملف',
     sortBy: 'الترتيب', pageOrder: 'ترتيب الصفحة', sortName: 'بالاسم', sortType: 'نوع الملف',
     largeOnly: 'الصور الكبيرة', exportCsv: 'CSV', csvCopied: 'تم نسخ CSV للنتائج الظاهرة.'
   }
@@ -92,12 +92,13 @@ function empty(message) {
   ui.results.append(block);
 }
 function render() {
-  const counts = {all: state.assets.length, image: 0, video: 0, document: 0};
+  const counts = {all: state.assets.length, image: 0, video: 0, document: 0, audio: 0};
   for (const asset of state.assets) counts[asset.type]++;
   ui.countAll.textContent = counts.all;
   ui.countImage.textContent = counts.image;
   ui.countVideo.textContent = counts.video;
   ui.countDocument.textContent = counts.document;
+  ui.countAudio.textContent = counts.audio;
   ui.totalCount.textContent = String(counts.all).padStart(2, '0');
   const shown = visibleAssets();
   renderButtons();
@@ -121,7 +122,7 @@ function render() {
     });
     const icon = document.createElement('span');
     icon.className = 'asset-icon';
-    icon.textContent = {image: '▧', video: '▷', document: '▤'}[asset.type];
+    icon.textContent = {image: '▧', video: '▷', document: '▤', audio: '♫'}[asset.type];
     const info = document.createElement('span');
     info.className = 'asset-info';
     const name = document.createElement('div');
@@ -150,7 +151,7 @@ function render() {
 function applyScannedPage(result) {
   if (!result || !Array.isArray(result.assets)) throw new Error('Invalid scan result');
   state.page = result;
-  state.assets = result.assets.filter(a => ['image', 'video', 'document'].includes(a?.type) &&
+  state.assets = result.assets.filter(a => ['image', 'video', 'audio', 'document'].includes(a?.type) &&
     typeof a?.url === 'string' && /^https?:\/\//i.test(a.url));
   state.selected.clear();
   ui.pageHost.textContent = result.domain || '—';

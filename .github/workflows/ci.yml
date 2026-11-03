@@ -28,6 +28,8 @@ jobs:
         run: node tests/test-vscode-companion.cjs
       - name: Native companion host contract tests
         run: python3 tests/test-companion-host.py
+      - name: Native Messaging trust boundary regression tests
+        run: python3 tests/test-native-boundary.py
       - name: FFmpeg companion safety tests
         run: python3 tests/test-companion.py
       - name: Ensure FFmpeg for HLS integration

@@ -17,6 +17,7 @@ Security Guarantees:
 import ipaddress
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import socket
@@ -25,7 +26,7 @@ import subprocess
 import sys
 from urllib.parse import urlsplit
 
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 HOST_NAME = "com.knoux.grabflow.companion"
 
 
@@ -43,21 +44,31 @@ def is_safe_destination(path: Path) -> bool:
 
 
 def resolve_safe_output(out_str: str) -> Path:
-    """Resolve an output path safely, placing relative filenames into user's Downloads."""
+    """Accept only relative names, always resolve beneath the user's Downloads."""
+    from pathlib import PureWindowsPath
+
+    if not isinstance(out_str, str) or not out_str or len(out_str) > 240:
+        raise ValueError('Output filename is missing or too long')
     p = Path(out_str)
-    if not p.is_absolute() or len(p.parts) == 1:
-        downloads = Path.home() / 'Downloads'
-        if not downloads.exists():
-            downloads = Path.home()
-        safe_name = p.name.replace(':', '_').replace('/', '_').replace('\\', '_')
-        if not safe_name.endswith('.mp4') and not safe_name.endswith('.mkv'):
-            safe_name += '.mp4'
-        p = downloads / safe_name
-    return p.resolve()
+    win = PureWindowsPath(out_str)
+    if p.anchor or win.anchor or '..' in p.parts or '..' in win.parts:
+        raise ValueError('Output must be a relative path within Downloads')
+
+    downloads = Path.home() / 'Downloads'
+    if not downloads.exists():
+        downloads = Path.home()
+    safe_name = re.sub(r'[\x00-\x1f<>:"/\\|?*]', '_', p.name).strip(' .')[:120]
+    if not safe_name or re.match(r'(?i)^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)', safe_name):
+        raise ValueError('Invalid output filename')
+    if not safe_name.lower().endswith(('.mp4', '.mkv')):
+        safe_name += '.mp4'
+    return (downloads / safe_name).resolve()
 
 
 def validate_media_url(url: str, allow_local: bool = False):
     """Validate HTTP/HTTPS media URL and enforce SSRF protections."""
+    if not isinstance(url, str) or len(url) > 4096:
+        raise ValueError('Invalid or oversized media URL')
     parsed = urlsplit(url)
     if parsed.scheme not in ('http', 'https') or not parsed.hostname:
         raise ValueError('Only HTTP and HTTPS media URLs are supported')
@@ -142,8 +153,10 @@ class CompanionHost:
         }
 
     def handle_probe(self, msg):
+        if 'allowLocal' in msg:
+            raise ValueError('Network policy cannot be overridden by a browser message')
         url = msg.get('url', '')
-        validate_media_url(url, allow_local=self.allow_local or msg.get('allowLocal', False))
+        validate_media_url(url, allow_local=self.allow_local)
         _ffmpeg, ffprobe = find_binaries()
         if not ffprobe:
             return {'action': 'probe_result', 'status': 'unavailable', 'message': 'ffprobe is not installed'}
@@ -162,6 +175,8 @@ class CompanionHost:
             return {'action': 'probe_result', 'status': 'error', 'error': str(e)}
 
     def handle_assemble(self, msg):
+        if 'allowLocal' in msg:
+            raise ValueError('Network policy cannot be overridden by a browser message')
         url = msg.get('url', '')
         job_id = msg.get('jobId', 'default')
         out_str = msg.get('output', '')
@@ -173,7 +188,7 @@ class CompanionHost:
         if not is_safe_destination(out_path):
             raise ValueError('Invalid destination path or file already exists (no-clobber enforced)')
 
-        validate_media_url(url, allow_local=self.allow_local or msg.get('allowLocal', False))
+        validate_media_url(url, allow_local=self.allow_local)
         ffmpeg, _ffprobe = find_binaries()
         if not ffmpeg:
             return {'action': 'assemble_result', 'jobId': job_id, 'status': 'failed', 'error': 'FFmpeg executable is not available'}

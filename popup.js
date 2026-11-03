@@ -37,6 +37,7 @@ const dictionary = {
     retry: 'Retry', cancel: 'Cancel', stateComplete: 'Complete', stateInProgress: 'Downloading',
     stateInterrupted: 'Interrupted', stateFailed: 'Failed',
     companionConnected: 'COMPANION: CONNECTED', companionChecking: 'COMPANION: CHECKING', companionMissing: 'COMPANION: NOT INSTALLED',
+    companionToolsMissing: 'COMPANION: FFMPEG/FFPROBE MISSING', cancelUnavailable: 'Cancel unavailable',
     subtitlesLabel: n => `${n} SUBTITLES`,
     mediaPreview: 'Media Preview', previewBtn: 'Preview',
     assembleWithCompanion: '⚡ Assemble', copyFfmpeg: '📋 FFmpeg',
@@ -71,6 +72,7 @@ const dictionary = {
     noDownloads: 'لا توجد تنزيلات نشطة أو سابقة.', openFile: 'فتح', showFolder: 'المجلد',
     retry: 'إعادة', cancel: 'إلغاء', stateComplete: 'مكتمل', stateInProgress: 'جارٍ التحميل',
     stateInterrupted: 'متوقف', stateFailed: 'فشل',
+    companionToolsMissing: 'المساعد: FFmpeg/FFprobe غير متاحين', cancelUnavailable: 'الإلغاء غير متاح',
     companionConnected: 'المساعد: متصل', companionChecking: 'المساعد: جارٍ التحقق', companionMissing: 'المساعد: غير مثبت',
     subtitlesLabel: n => `${n} ترجمة`,
     mediaPreview: 'معاينة الوسائط', previewBtn: 'معاينة',
@@ -92,7 +94,7 @@ const state = {
   tab: null,
   page: null,
   view: 'scanner', // 'scanner' | 'manager'
-  companion: { connected: false, version: null },
+  companion: { connected: false, version: null, missingTools: false },
   activeDownloads: new Map(),
   previewingAsset: null
 };
@@ -120,7 +122,7 @@ function translate() {
   ui.selectedLabel.textContent = t('selected', state.selected.size);
   if (ui.companionStatus) {
     ui.companionStatus.textContent = state.companion.connected
-      ? t('companionConnected') : t('companionMissing');
+      ? t('companionConnected') : state.companion.missingTools ? t('companionToolsMissing') : t('companionMissing');
   }
   if (state.page) render();
   renderDownloads();
@@ -568,15 +570,18 @@ function renderDownloads() {
       const cancelBtn = document.createElement('button');
       cancelBtn.type = 'button';
       cancelBtn.className = 'dl-action-btn';
-      cancelBtn.textContent = t('cancel');
-      cancelBtn.addEventListener('click', () => {
-        if (item.isCompanion && chrome.runtime?.sendNativeMessage) {
-          chrome.runtime.sendNativeMessage('com.knoux.grabflow.companion', {action: 'cancel', jobId: item.id});
-          recordDownloadJob(item.id, {state: 'failed', error: 'Cancelled by user'});
-        } else if (typeof item.id === 'number' && chrome.downloads?.cancel) {
-          chrome.downloads.cancel(item.id);
-        }
-      });
+      cancelBtn.textContent = item.isCompanion ? t('cancelUnavailable') : t('cancel');
+      if (item.isCompanion) {
+        // sendNativeMessage creates a new host process; it cannot cancel the old one.
+        cancelBtn.disabled = true;
+        cancelBtn.title = 'Native assembly cancellation needs a persistent host session.';
+      } else {
+        cancelBtn.addEventListener('click', () => {
+          if (typeof item.id === 'number' && chrome.downloads?.cancel) {
+            chrome.downloads.cancel(item.id);
+          }
+        });
+      }
       actions.append(cancelBtn);
     }
 
@@ -620,31 +625,29 @@ async function restoreDownloadStatus() {
 }
 
 async function checkNativeCompanion() {
+  state.companion.connected = false;
+  state.companion.missingTools = false;
   if (!chrome.runtime?.sendNativeMessage) {
-    state.companion.connected = false;
     if (ui.companionStatus) ui.companionStatus.textContent = t('companionMissing');
     return;
   }
   try {
-    chrome.runtime.sendNativeMessage('com.knoux.grabflow.companion', {action: 'ping'}, resp => {
-      if (chrome.runtime.lastError || !resp || resp.action !== 'pong') {
-        state.companion.connected = false;
-        if (ui.companionStatus) {
-          ui.companionStatus.classList.remove('connected');
-          ui.companionStatus.textContent = t('companionMissing');
-        }
-      } else {
-        state.companion.connected = true;
-        state.companion.version = resp.version;
-        if (ui.companionStatus) {
-          ui.companionStatus.classList.add('connected');
-          ui.companionStatus.textContent = t('companionConnected');
-        }
+    chrome.runtime.sendNativeMessage('com.knoux.grabflow.companion', {action:'ping'}, resp => {
+      const reachable = !chrome.runtime.lastError && resp && resp.action === 'pong';
+      state.companion.missingTools = !!reachable && !(resp.ffmpegAvailable && resp.ffprobeAvailable);
+      state.companion.connected = !!reachable && !state.companion.missingTools;
+      state.companion.version = reachable ? resp.version : null;
+      if (ui.companionStatus) {
+        ui.companionStatus.classList.toggle('connected', state.companion.connected);
+        ui.companionStatus.textContent = state.companion.connected
+          ? t('companionConnected') : state.companion.missingTools
+            ? t('companionToolsMissing') : t('companionMissing');
       }
-      render();
+      if (state.page) render();
     });
   } catch (_) {
     state.companion.connected = false;
+    state.companion.missingTools = false;
     if (ui.companionStatus) ui.companionStatus.textContent = t('companionMissing');
   }
 }

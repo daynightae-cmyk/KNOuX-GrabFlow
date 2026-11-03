@@ -22,13 +22,27 @@ function safeDownloadName(asset, index, pageDomain) {
   const domain = String(pageDomain || 'website').replace(/[^a-z0-9.\-_]/gi, '_').slice(0, 70) || 'website';
   return `KNOuX-GrabFlow/${domain}/${name}`;
 }
+function isDownloadableAsset(asset) {
+  // HLS/DASH manifests must be assembled into a movie by a dedicated converter.
+  return !!asset && (asset.type !== 'video' || !['hls', 'dash'].includes(asset.format));
+}
+function summarizeDownloads(items) {
+  const counts = {complete: 0, running: 0, interrupted: 0, missing: 0};
+  for (const item of items) {
+    if (!item) counts.missing++;
+    else if (item.state === 'complete') counts.complete++;
+    else if (item.state === 'interrupted') counts.interrupted++;
+    else counts.running++;
+  }
+  return counts;
+}
 function exportAssetsCsv(assets) {
   const quote = v => {
     let text = String(v ?? '');
     if (/^\s*[=+@-]/.test(text)) text = `'${text}`; // spreadsheet formula injection
     return `"${text.replace(/"/g, '""')}"`;
   };
-  return [['type','name','url','width','height','source'].join(','), ...assets.map(a =>
-    [a.type, a.name, a.url, a.width || '', a.height || '', a.source || 'dom'].map(quote).join(','))].join('\r\n');
+  return [['type','name','url','width','height','source','format'].join(','), ...assets.map(a =>
+    [a.type, a.name, a.url, a.width || '', a.height || '', a.source || 'dom', a.format || ''].map(quote).join(','))].join('\r\n');
 }
-if (typeof module !== 'undefined') module.exports = {filterSortAssets, safeDownloadName, exportAssetsCsv};
+if (typeof module !== 'undefined') module.exports = {filterSortAssets, safeDownloadName, exportAssetsCsv, isDownloadableAsset, summarizeDownloads};

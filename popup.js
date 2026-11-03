@@ -3,7 +3,7 @@
 const ui = Object.fromEntries([
   'langBtn','refreshBtn','totalCount','pageHost','search','results','selectedLabel',
   'selectVisible','clearSelection','copyBtn','downloadBtn','notice','countAll',
-  'countImage','countVideo','countAudio','countDocument','sortMode','largeImages','csvBtn'
+  'countImage','countVideo','countAudio','countDocument','sortMode','largeImages','csvBtn','downloadStatus'
 ].map(id => [id, document.getElementById(id)]));
 
 const dictionary = {
@@ -22,7 +22,11 @@ const dictionary = {
     blocked: 'Some files may be unavailable or require website permission.',
     typeImage: 'IMAGE', typeVideo: 'VIDEO', typeAudio: 'AUDIO', typeDocument: 'FILE',
     sortBy: 'Sort', pageOrder: 'Page order', sortName: 'Name A–Z', sortType: 'File type',
-    largeOnly: 'Large images', exportCsv: 'CSV', csvCopied: 'CSV copied for the visible results.'
+    largeOnly: 'Large images', exportCsv: 'CSV', csvCopied: 'CSV copied for the visible results.',
+    streamHint: 'Stream playlist — needs a converter to produce one playable video.',
+    streamNotDirect: 'HLS/DASH playlists cannot be saved as complete videos with Chrome Downloads. Copy the links for an authorized converter.',
+    streamSkipped: n => `${n} streaming playlists skipped (copy their links for a converter).`,
+    downloadProgress: (c,r,f) => `Downloaded: ${c} complete · ${r} running · ${f} failed`,
   },
   ar: {
     heroNote: 'محلي • خصوصية • عند الطلب', detected: 'ملف قابل للاكتشاف في الصفحة',
@@ -39,7 +43,11 @@ const dictionary = {
     blocked: 'قد تتطلب بعض الملفات صلاحيات من الموقع أو تكون غير متاحة.',
     typeImage: 'صورة', typeVideo: 'فيديو', typeAudio: 'صوت', typeDocument: 'ملف',
     sortBy: 'الترتيب', pageOrder: 'ترتيب الصفحة', sortName: 'بالاسم', sortType: 'نوع الملف',
-    largeOnly: 'الصور الكبيرة', exportCsv: 'CSV', csvCopied: 'تم نسخ CSV للنتائج الظاهرة.'
+    largeOnly: 'الصور الكبيرة', exportCsv: 'CSV', csvCopied: 'تم نسخ CSV للنتائج الظاهرة.',
+    streamHint: 'قائمة بث تحتاج تجميعًا لإنتاج فيديو واحد قابل للتشغيل.',
+    streamNotDirect: 'قوائم HLS/DASH ليست ملفات فيديو كاملة. انسخ الرابط واستخدم محوّلًا مصرحًا به.',
+    streamSkipped: n => `تم تجاوز ${n} قائمة بث؛ يمكن نسخ روابطها للمحوّل.`,
+    downloadProgress: (c,r,f) => `التنزيل: ${c} مكتمل · ${r} جارٍ · ${f} فشل`,
   }
 };
 
@@ -56,6 +64,7 @@ function translate() {
   ui.search.placeholder = t('search');
   ui.selectedLabel.textContent = t('selected', state.selected.size);
   if (state.page) render();
+  if (!ui.downloadStatus.hidden) restoreDownloadStatus();
 }
 function notice(message, error = false) {
   ui.notice.hidden = !message;
@@ -75,8 +84,9 @@ function setBusy(busy) {
 }
 function renderButtons() {
   const hasSelection = state.selected.size > 0;
+  const hasDownloadable = selectedAssets().some(isDownloadableAsset);
   ui.copyBtn.disabled = state.busy || !hasSelection;
-  ui.downloadBtn.disabled = state.busy || !hasSelection;
+  ui.downloadBtn.disabled = state.busy || !hasDownloadable;
   ui.selectedLabel.textContent = t('selected', state.selected.size);
 }
 function empty(message) {
@@ -109,6 +119,7 @@ function render() {
     const row = document.createElement('label');
     row.className = 'asset';
     row.classList.toggle('selected', state.selected.has(asset.url));
+    row.classList.toggle('stream', asset.type === 'video' && !isDownloadableAsset(asset));
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = state.selected.has(asset.url);
@@ -134,6 +145,13 @@ function render() {
     url.textContent = asset.url;
     url.title = asset.url;
     info.append(name, url);
+    if (asset.type === 'video') {
+      const format = document.createElement('div');
+      format.className = 'asset-format';
+      format.textContent = (asset.format === 'hls' ? 'HLS · M3U8' : asset.format === 'dash' ? 'DASH · MPD' : 'VIDEO FILE');
+      if (!isDownloadableAsset(asset)) format.title = t('streamHint');
+      info.append(format);
+    }
     if (asset.type === 'image' && asset.width && asset.height) {
       const dimensions = document.createElement('div');
       dimensions.className = 'asset-meta';
@@ -192,11 +210,15 @@ async function scan() {
 }
 function selectedAssets() { return state.assets.filter(asset => state.selected.has(asset.url)); }
 async function downloadSelected() {
-  const chosen = selectedAssets();
+  const allSelected = selectedAssets();
+  const chosen = allSelected.filter(isDownloadableAsset);
+  const skipped = allSelected.length - chosen.length;
+  if (!chosen.length && skipped) { notice(t('streamNotDirect'), true); return; }
   if (!chosen.length) { notice(t('selectFirst'), true); return; }
   if (chosen.length > 30) { notice(t('max'), true); return; }
   setBusy(true);
   let success = 0, failures = 0;
+  const ids = [];
   try {
     for (let index = 0; index < chosen.length; index++) {
       const asset = chosen[index];
@@ -205,14 +227,37 @@ async function downloadSelected() {
         const id = await chrome.downloads.download({
           url: asset.url, filename: safeDownloadName(asset, index + 1, state.page?.domain), conflictAction: 'uniquify', saveAs: false
         });
-        if (typeof id === 'number') success++; else failures++;
+        if (typeof id === 'number') { success++; ids.push(id); } else failures++;
       } catch (_) { failures++; }
     }
-    // "Started" refers only to browser-accepted jobs, not completed files.
-    notice(t('done', success, failures), failures > 0);
+    // Persist IDs only: reopening the popup reconciles Chrome's real download states.
+    if (ids.length) {
+      try { await chrome.storage.local.set({downloadRuns: ids.slice(-30)}); } catch (_) { /* optional */ }
+    }
+    const suffix = skipped ? ` · ${t('streamSkipped', skipped)}` : '';
+    notice(t('done', success, failures) + suffix, failures > 0 || skipped > 0);
+    if (ids.length) await refreshDownloadStatus(ids);
   } finally { setBusy(false); }
 }
 
+async function refreshDownloadStatus(ids) {
+  if (!Array.isArray(ids) || !ids.length || !chrome.downloads?.search) return;
+  const items = await Promise.all(ids.map(id => chrome.downloads.search({id}).then(x => x?.[0] || null).catch(() => null)));
+  const totals = summarizeDownloads(items);
+  ui.downloadStatus.hidden = false;
+  ui.downloadStatus.textContent = t('downloadProgress', totals.complete, totals.running, totals.interrupted + totals.missing);
+}
+async function restoreDownloadStatus() {
+  try {
+    const data = await chrome.storage.local.get(['downloadRuns']);
+    await refreshDownloadStatus(data.downloadRuns);
+  } catch (_) { /* download history is optional, never blocks the page scan */ }
+}
+if (chrome.downloads?.onChanged?.addListener) {
+  chrome.downloads.onChanged.addListener(() => {
+    chrome.storage.local.get(['downloadRuns']).then(data => refreshDownloadStatus(data.downloadRuns)).catch(() => {});
+  });
+}
 ui.langBtn.addEventListener('click', async () => {
   state.lang = state.lang === 'en' ? 'ar' : 'en';
   translate();
@@ -253,5 +298,5 @@ ui.downloadBtn.addEventListener('click', downloadSelected);
       ? settings.language : (navigator.language.toLowerCase().startsWith('ar') ? 'ar' : 'en');
   } catch (_) { state.lang = 'en'; }
   translate();
-  await scan();
+  await Promise.all([scan(), restoreDownloadStatus()]);
 })();

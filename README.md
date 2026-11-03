@@ -60,3 +60,14 @@ See `ROADMAP.md`, `PRIVACY.md` and `TEST-REPORT.md`.
 ## v0.3.0 Beta — audio and responsive-media hardening
 
 This version adds direct **audio** discovery, image `<picture>` and lazy source fallbacks, OpenGraph media detection and stronger scanner regressions. See [v0.3 release notes](RELEASE_NOTES-v0.3.0.md) and [v0.3 test report](TEST-REPORT-v0.3.0.md). Chrome Web Store publication and actual full-download verification remain pending.
+
+## v0.4 VIDEO-FIRST beta
+
+- Direct MP4/WebM/OGV/MOV/M4V: scans and requests full-file downloads using Chrome Downloads. Reopen the popup to reconcile real states: complete / still running / interrupted.
+- HLS `.m3u8` and DASH `.mpd`: detected from video players, source tags, direct links, same-page Resource Timing observations and VideoObject structured metadata. These are *playlists*, NOT complete MP4 files; GrabFlow labels them distinctly and lets users copy links.
+- Optional desktop FFmpeg helper is `scripts/assemble_stream.py` (not bundled in the Chrome extension or Web Store ZIP). It assembles permitted, unprotected HLS/DASH into one playable MP4/MKV when FFmpeg is installed. Example:
+
+  `py scripts/assemble_stream.py --url "https://your-owned-site.example/clip/master.m3u8" --output "D:\\Videos\\my-video.mp4"`
+
+- No DRM bypass, authentication interception, broad host permissions, background scanner, or telemetry. Conversion needs the playlist and segments to be accessible without circumventing restrictions.
+- Automated evidence: 24 scanner/security checks, 10 utility checks, 4 companion safety checks, a controlled 3-second HLS=>MP4 video+audio integration, and a Chromium popup mock. *Real Chrome toolbar-click QA is still pending.*

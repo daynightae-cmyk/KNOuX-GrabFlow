@@ -17,3 +17,12 @@
 .tab{font-size:10px;min-width:0}
 select:focus-visible,.asset input:focus-visible{outline:2px solid #bb8bff;outline-offset:2px}
 html[dir=rtl] .sort-group select{text-align:right}
+
+/* Video-first status without additional active background permissions */
+.asset.stream { border-inline-start: 2px solid #c084fc; }
+.asset-format { display: inline-block; margin-block-start: 3px; font-size: 10px; font-weight: 750;
+ color: #d9b7ff; letter-spacing: .04em; }
+.download-status { border: 1px solid rgba(168,85,247,.24); border-radius: 10px;
+ background: rgba(83,38,137,.15); padding: 7px 10px; font-size: 11px;
+ color: #e6d6fc; margin-block-end: 7px; }
+.tab[data-filter="video"] { box-shadow: inset 0 -2px 0 rgba(192,132,252,.32); }

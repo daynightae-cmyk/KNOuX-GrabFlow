@@ -14,7 +14,7 @@ function makeNode(attrs = {}, extra = {}) {
     querySelectorAll: selector => (extra.children || {})[selector] || [],
   };
 }
-function run({imgs=[], videos=[], audios=[], pictures=[], metas=[], links=[], css=[], hostname='example.com', title='Example', url='https://example.com/page'} = {}) {
+function run({imgs=[], videos=[], audios=[], pictures=[], metas=[], links=[], css=[], scripts=[], resourceUrls=[], hostname='example.com', title='Example', url='https://example.com/page'} = {}) {
   const document = {
     baseURI: url, title,
     querySelectorAll: selector => ({
@@ -22,9 +22,11 @@ function run({imgs=[], videos=[], audios=[], pictures=[], metas=[], links=[], cs
       'picture source[srcset],picture source[data-srcset]': pictures,
       'meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"],meta[property="og:video"],meta[property="og:video:url"],meta[property="og:video:secure_url"],meta[property="og:audio"],meta[property="og:audio:secure_url"]': metas,
       'a[href]': links, '[style*="background"]': css,
+      'script[type="application/ld+json"]': scripts,
     })[selector] || []
   };
-  return vm.runInNewContext(`${scanner}\nscanPageAssets()`, {document, location: {hostname, href: url}, URL, Set, String, RegExp});
+  const performance = {getEntriesByType: type => type === 'resource' ? resourceUrls.map(name=>({name})) : []};
+  return vm.runInNewContext(`${scanner}\nscanPageAssets()`, {document, location: {hostname, href: url}, URL, Set, String, RegExp, performance});
 }
 function test(name, fn) { fn(); passed++; console.log('PASS', name); }
 
@@ -112,5 +114,39 @@ test('records loaded image dimensions for size filtering', () => {
 test('sanitizes untrusted labels by truncating long strings', () => {
   const page = run({imgs:[makeNode({src:'/pic.jpg',alt:'A'.repeat(500)})]});
   assert.equal(page.assets[0].name.length,140);
+});
+test('detects HLS and DASH manifests but never mistakes segments for full videos', () => {
+  const video = makeNode({src:'blob:https://example.com/test'}, {children:{'source[src],source[data-src]':[makeNode({src:'/stream/master.m3u8'})]}});
+  const page=run({videos:[video], links:[makeNode({href:'/livestream.mpd'}),makeNode({href:'/segment_001.ts'})]});
+  assert.deepEqual(Array.from(page.assets,a=>a.format), ['hls','dash']);
+  assert.equal(page.assets.length,2);
+});
+test('finds dynamically requested direct media and HLS via resource timing names only', () => {
+  const page=run({resourceUrls:['https://example.com/player.js','https://cdn.example.com/clip.mp4?token=x',
+    'https://cdn.example.com/index.m3u8','https://cdn.example.com/part_02.m4s']});
+  assert.deepEqual(Array.from(page.assets,a=>a.format), ['direct','hls']);
+  assert.ok(page.assets.every(a=>a.source==='resource-timing'));
+});
+test('detects extensionless video sources only when explicit media MIME is provided', () => {
+  const video=makeNode({src:'https://example.com/api/asset?id=44',type:'video/mp4'});
+  const stream=makeNode({href:'https://example.com/live/playlist?id=1',type:'application/vnd.apple.mpegurl'});
+  const page=run({videos:[video],links:[stream]});
+  assert.deepEqual(Array.from(page.assets,a=>a.format), ['direct','hls']);
+});
+test('discovers direct VideoObject contentUrl without executing embedded page scripts', () => {
+  const scripts=[makeNode({}, {textContent:JSON.stringify({'@graph':[{'@type':'VideoObject',name:'My movie',contentUrl:'https://cdn.example.com/my-video.webm'}]})})];
+  const page=run({scripts});
+  assert.equal(page.assets.length,1);
+  assert.equal(page.assets[0].name,'My movie');
+  assert.equal(page.assets[0].format,'direct');
+});
+test('limits structured metadata and does not classify generic embed pages as video files', () => {
+  const scripts=[makeNode({}, {textContent:'{' + 'a'.repeat(140000)})];
+  const page=run({scripts,resourceUrls:['https://example.com/watch?video=1','https://example.com/stream/seg_4.ts']});
+  assert.equal(page.assets.length,0);
+});
+test('does not expose video manifests or observed files from YouTube host', () => {
+  const page=run({hostname:'youtube.com',resourceUrls:['https://cdn.example.com/vid.mp4','https://cdn.example.com/master.m3u8'],links:[makeNode({href:'/list.m3u8'})]});
+  assert.equal(page.assets.length,0);
 });
 console.log(`\n${passed} scanner/security checks passed.`);

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KNOuX GrabFlow</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="brand">
+        <img src="icons/icon128.png" width="41" height="41" alt="" />
+        <div><div class="eyebrow">KNOuX LABS <span class="vtag">BETA 0.2</span></div><div class="brand-name">Grab<span>Flow</span><span class="trademark">™</span></div></div>
+      </div>
+      <button id="langBtn" type="button" class="lang-button" aria-label="Switch language">عربي</button>
+    </header>
+
+    <section class="hero" aria-live="polite">
+      <div class="hero-top"><span class="status-dot"></span><span data-i18n="heroNote">LOCAL • PRIVATE • ON DEMAND</span></div>
+      <div class="hero-main"><div><div class="total" id="totalCount">—</div><div class="hero-label" data-i18n="detected">Assets detected on this page</div></div><button id="refreshBtn" type="button" class="refresh" title="Scan again" aria-label="Scan again">↻</button></div>
+      <div class="host" id="pageHost">—</div>
+    </section>
+
+    <section class="tools" aria-label="Asset filters">
+      <div class="tabs" role="group" aria-label="Type">
+        <button type="button" class="tab active" data-filter="all" aria-pressed="true"><span data-i18n="all">All</span> <span class="pill" id="countAll">0</span></button>
+        <button type="button" class="tab" data-filter="image" aria-pressed="false"><span data-i18n="images">Images</span> <span class="pill" id="countImage">0</span></button>
+        <button type="button" class="tab" data-filter="video" aria-pressed="false"><span data-i18n="videos">Video</span> <span class="pill" id="countVideo">0</span></button>
+        <button type="button" class="tab" data-filter="document" aria-pressed="false"><span data-i18n="docs">Files</span> <span class="pill" id="countDocument">0</span></button>
+      </div>
+      <label class="search-shell"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="m16 16 5 5"/></svg><input id="search" type="search" autocomplete="off" placeholder="Filter by name or URL..." aria-label="Filter results" /></label>
+      <div class="smart-tools">
+        <label class="sort-group" for="sortMode"><span data-i18n="sortBy">Sort</span><select id="sortMode" aria-label="Sort assets"><option value="page" data-i18n="pageOrder">Page order</option><option value="name" data-i18n="sortName">Name A–Z</option><option value="type" data-i18n="sortType">File type</option></select></label>
+        <label class="large-only"><input id="largeImages" type="checkbox"/><span data-i18n="largeOnly">Large images</span></label>
+      </div>
+      <div class="selection-bar"><span id="selectedLabel">0 selected</span><div class="select-actions"><button id="csvBtn" type="button" data-i18n="exportCsv">CSV</button><span>·</span><button id="selectVisible" type="button" data-i18n="selectVisible">Select visible</button><span>·</span><button id="clearSelection" type="button" data-i18n="clear">Clear</button></div></div>
+    </section>
+
+    <main id="results" class="results" aria-live="polite"><div class="empty"><div class="empty-orbit">◇</div><div data-i18n="scanning">Scanning page…</div></div></main>
+
+    <footer class="footer">
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <div class="buttons"><button type="button" id="copyBtn" class="secondary" disabled><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16H3a1 1 0 0 1-1-1V4a2 2 0 0 1 2-2h11a1 1 0 0 1 1 1v1"/></svg><span data-i18n="copy">Copy links</span></button><button type="button" id="downloadBtn" class="primary" disabled><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3"/></svg><span data-i18n="download">Download selected</span></button></div>
+      <div class="fineprint"><span data-i18n="privacy">No tracking. No uploads. No accounts.</span><span class="fine-divider">✦</span><span data-i18n="legal">Use only for permitted content</span></div>
+    </footer>
+  </div>
+  <script src="asset-utils.js"></script>
+  <script src="scan-page.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+name: Chrome Extension CI
+on:
+  push:
+    branches: [main, 'feature/**', 'fix/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax checks
+        run: |
+          node --check popup.js
+          node --check scan-page.js
+          node --check asset-utils.js
+      - name: Scanner and security tests
+        run: node tests/test-scanner.cjs
+      - name: Utility and export tests
+        run: node tests/test-utilities.cjs
+      - name: Create deterministic Chrome zip
+        run: python3 scripts/package.py
+      - name: Stage Chrome ZIP for Actions artifact
+        run: |
+          mkdir -p artifacts
+          cp ../KNOuX-GrabFlow-CHROME-v*.zip artifacts/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KNOuX-GrabFlow-chrome
+          path: artifacts/*.zip
+          if-no-files-found: error
+  popup-browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Chromium + Playwright
+        run: |
+          python -m pip install 'playwright==1.55.0'
+          python -m playwright install --with-deps chromium
+      - name: Popup browser UI integration (mock Chrome APIs)
+        run: python tests/test-ui-inmemory.py

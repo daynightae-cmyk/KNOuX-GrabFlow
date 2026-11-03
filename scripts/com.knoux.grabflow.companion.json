@@ -1,0 +1,10 @@
+{
+  "name": "com.knoux.grabflow.companion",
+  "description": "KNOuX GrabFlow Windows Native Media Companion Host",
+  "path": "companion_host.bat",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://*",
+    "chrome-extension://ljebkgcfhknomdopdjjgnhclgmbphnld/"
+  ]
+}

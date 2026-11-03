@@ -19,14 +19,16 @@ window.chrome={
  storage:{local:{get:async()=>({language:'en'}),set:async()=>{}}},
  tabs:{query:async()=>[{id:7,url:'https://example.com/work'}]},
  scripting:{executeScript:async()=>[{result:{title:'Portfolio',domain:'example.com',pageUrl:'https://example.com/work',assets:mockAssets,truncated:false}}]},
- downloads:{download:async(data)=>{window.__startedDownloads.push(data);return window.__startedDownloads.length;}}
+ downloads:{download:async(data)=>{window.__startedDownloads.push(data);return window.__startedDownloads.length;},
+   search:async({id})=>[{id,state:'complete'}],onChanged:{addListener:()=>{}}},
+ runtime:{sendNativeMessage:(host,msg,cb)=>{if(cb)cb({action:'pong',version:'0.5.0'});}}
 };
 '''
 handler=functools.partial(SimpleHTTPRequestHandler, directory=str(ROOT))
 server=ThreadingHTTPServer(('127.0.0.1',0),handler)
 threading.Thread(target=server.serve_forever, daemon=True).start()
 with sync_playwright() as p:
-    browser=p.chromium.launch(headless=True,executable_path='/usr/bin/chromium',args=['--no-sandbox'])
+    browser=p.chromium.launch(headless=True,executable_path='/usr/bin/chromium' if Path('/usr/bin/chromium').exists() else None,args=['--no-sandbox'])
     page=browser.new_page(viewport={'width':465,'height':680},device_scale_factor=1)
     errs=[]
     page.on('pageerror',lambda error: errs.append(str(error)))

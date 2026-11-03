@@ -1,73 +1,82 @@
 # KNOuX GrabFlow™ — Chrome MV3
 
-**Click-to-scan page assets. Private by design. Beautifully simple.**
+**Intelligent Video & Web Asset Discovery. Private by design. Beautifully engineered.**
 
-An independent KNOuX LABS browser extension for finding directly exposed page images, video files and downloadable documents. Bilingual English/Arabic (RTL), local-only, zero analytics, no hosted backend.
+An independent KNOuX LABS browser extension for discovering, classifying and saving accessible video files, adaptive stream playlists, audio, images and downloadable documents. Bilingual English/Arabic (RTL), local-only, zero telemetry, no hosted backend.
 
-## What works in v0.2.0
+---
 
-- Chrome MV3, temporary `activeTab` access **only after pressing the action**. No host permissions, background listener or network interception.
-- Scan page DOM for `<img>` (loaded and lazy images), `<video>` and source elements, direct document/video/image links, Open Graph *direct* video URLs, and limited inline CSS background image URLs.
-- Deduplication and 600-result cap; filter by type; search; sort by page/name/type; image-size filter (known dimensions >= 800px), PNG/WEBP/etc.
-- Select visible, copy selected URLs, export visible results to sanitized CSV (clipboard), start up to 30 downloads per batch into a named subfolder under Downloads.
-- Windows-safe filenames and CSV formula injection protection. No writes outside user Downloads.
-- Optional language preference in `chrome.storage.local`; no page data retained.
+## What Works in v0.5.0 Release Candidate
 
-## Install for testing
+- **Chrome MV3 Least Privilege:** Temporary `activeTab` access only upon user invocation. No broad host permissions, no remote code execution, no background activity while idle.
+- **Video-First Media Engine:**
+  - Direct video identification: MP4, WebM, MKV, MOV, M4V, OGV.
+  - Audio discovery: MP3, M4A, AAC, WAV, FLAC, OGG, OPUS, WEBA.
+  - Adaptive stream classification: HLS (`.m3u8`) and DASH (`.mpd`) playlists accurately labeled with variant and track information.
+  - Subtitle detection: `<track kind="subtitles|captions">` inspection.
+  - Codec & resolution extraction from MIME parameters and DOM dimensions.
+  - Bounded custom player scanning: detects dynamic web components (`video-js`, `plyr`, `media-player`, open shadow roots).
+- **Real Download Manager:**
+  - Drawer integrated into the popup showing live states: `Starting`, `Downloading`, `Completed`, `Interrupted`, `Failed`.
+  - Verified byte progress, file size, and error codes.
+  - In-app actions: `Open`, `Folder` (Explorer reveal), `Retry`, `Cancel`, `Clear History`.
+- **Windows Native Media Companion:**
+  - Secure Chrome Native Messaging host (`scripts/companion_host.py`) for assembling accessible HLS/DASH streams into MP4/MKV via local FFmpeg.
+  - Strict security: argument-array execution (no shell interpolation), SSRF protection against private IP access, no-clobber protection (`-n`).
+  - One-click registry installer: `py scripts/register_companion.py`.
+- **Obsidian Glass Design System:**
+  - KNOuX stag emblem with refined violet lighting.
+  - Palette: `#080512` Obsidian, `#7C3AED` Violet, `#9333EA` Electric Purple, `#C084FC` Lavender Glow.
+  - Full English LTR and Arabic RTL translations, keyboard navigation, and high-DPI assets.
 
-1. Download or clone the repository.
-2. Chrome → `chrome://extensions` → **Developer mode** → **Load unpacked** → choose the repository folder (the folder with `manifest.json`).
-3. On an ordinary `http(s)` page click the KNOuX icon, review detected URLs, optionally download permitted files.
+---
 
-## Build a store-upload ZIP
+## Testing & Quality Gates
+
+Run all automated verification suites:
 
 ```sh
-python3 scripts/package.py
-```
-
-This emits `KNOuX-GrabFlow-CHROME-v0.2.0.zip` one directory above the source folder; it includes **only** the nine files required for Chrome, no tests, no development artifacts.
-
-## Checks
-
-```sh
+# Syntax verification
 node --check popup.js
 node --check scan-page.js
 node --check asset-utils.js
+
+# Scanner & security unit tests (29 tests)
 node tests/test-scanner.cjs
+
+# Utility & export tests (12 tests)
 node tests/test-utilities.cjs
-python tests/test-ui-inmemory.py  # requires Playwright + Chromium
+
+# Native companion host contract tests (7 tests)
+python tests/test-companion-host.py
+
+# FFmpeg companion safety tests (4 tests)
+python tests/test-companion.py
+
+# Popup UI integration smoke
+python tests/test-ui-inmemory.py
+python tests/test-ui.py
+
+# 18-Fixture Real Browser Matrix E2E Test Suite
+python tests/test-e2e-matrix.py
 ```
 
-CI runs unit/security/package tests and mocked-Chrome browser UI smoke checks. **Mocked browser UI tests are not equivalent to an installed-extension/live-download test.**
+---
 
-## Security/limitations
+## Build Chrome Store Release Package
 
-- Directly exposed `http(s)` URLs only; nothing encrypted, protected, blocked, rendered inside cross-origin frames, HLS/DASH, DRM, blob URLs, or hidden in network requests. **This is not a universal video downloader.** No YouTube video extraction.
-- An offered link may expire or reject download due to server restrictions; “Downloads started” only means `chrome.downloads.download()` accepted the job, **not that a file finished successfully**.
-- Asset-size filter only uses image dimensions already available to the DOM; unknown dimensions are excluded when that toggle is active.
-- No auto-scanning every site, bulk crawler, credential bypass, remote telemetry, AI or server-based processing.
-- Use only for content you own or are authorized to download.
+```sh
+python scripts/package.py
+```
 
-## Next release gates
+Emits `KNOuX-GrabFlow-CHROME-v0.5.0.zip` (69,429 bytes, 9 runtime files, zero external dependencies).
 
-1. Install extension via Chrome on Windows and inspect runtime console, browser permissions and end-to-end files.
-2. Inspect page screenshots and Arabic/English UX, keyboard accessibility and realistic large pages.
-3. Review store data disclosure, official branding, privacy URL, screenshots and publish only after developer account authorization.
-4. Separate VS Code companion extension (`.vsix`) after Chrome MVP validation.
+---
 
-See `ROADMAP.md`, `PRIVACY.md` and `TEST-REPORT.md`.
+## Security & Privacy Hardening
 
-## v0.3.0 Beta — audio and responsive-media hardening
-
-This version adds direct **audio** discovery, image `<picture>` and lazy source fallbacks, OpenGraph media detection and stronger scanner regressions. See [v0.3 release notes](RELEASE_NOTES-v0.3.0.md) and [v0.3 test report](TEST-REPORT-v0.3.0.md). Chrome Web Store publication and actual full-download verification remain pending.
-
-## v0.4 VIDEO-FIRST beta
-
-- Direct MP4/WebM/OGV/MOV/M4V: scans and requests full-file downloads using Chrome Downloads. Reopen the popup to reconcile real states: complete / still running / interrupted.
-- HLS `.m3u8` and DASH `.mpd`: detected from video players, source tags, direct links, same-page Resource Timing observations and VideoObject structured metadata. These are *playlists*, NOT complete MP4 files; GrabFlow labels them distinctly and lets users copy links.
-- Optional desktop FFmpeg helper is `scripts/assemble_stream.py` (not bundled in the Chrome extension or Web Store ZIP). It assembles permitted, unprotected HLS/DASH into one playable MP4/MKV when FFmpeg is installed. Example:
-
-  `py scripts/assemble_stream.py --url "https://your-owned-site.example/clip/master.m3u8" --output "D:\\Videos\\my-video.mp4"`
-
-- No DRM bypass, authentication interception, broad host permissions, background scanner, or telemetry. Conversion needs the playlist and segments to be accessible without circumventing restrictions.
-- Automated evidence: 24 scanner/security checks, 10 utility checks, 4 companion safety checks, a controlled 3-second HLS=>MP4 video+audio integration, and a Chromium popup mock. *Real Chrome toolbar-click QA is still pending.*
+- **No Universal Permissions:** Uses click-to-scan `activeTab`.
+- **Untrusted Input Defense:** Strict sanitization of URLs, filenames, and CSV export text (formula injection defense).
+- **SSRF Defense:** Companion blocks local/loopback and RFC 1918 private network targets.
+- **Store Prohibitions:** No DRM circumvention, YouTube downloading, or paywall bypass.
+- **Privacy First:** Zero telemetry, no account requirements, zero cloud uploads.

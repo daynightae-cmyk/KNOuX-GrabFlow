@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict');
-const { filterSortAssets, safeDownloadName, exportAssetsCsv, isDownloadableAsset, summarizeDownloads } = require('../asset-utils');
+const { filterSortAssets, safeDownloadName, exportAssetsCsv, isDownloadableAsset, classifyMediaAsset, summarizeDownloads } = require('../asset-utils');
 let tests = 0;
 function test(name, fn) { fn(); console.log('PASS',name); tests++; }
 const data = [
@@ -42,7 +42,7 @@ test('CSV quotes potentially dangerous names as text', () => {
 test('manifest imposes least privilege, no remote code or background scanner', () => {
  const m = require('../manifest.json');
  assert.equal(m.manifest_version,3);
- assert.deepEqual(m.permissions,['activeTab','scripting','downloads','storage']);
+ assert.deepEqual(m.permissions,['activeTab','scripting','downloads','storage','nativeMessaging']);
  assert.equal(m.host_permissions,undefined);
  assert.equal(m.background,undefined);
  assert.ok(!JSON.stringify(m).includes('unsafe-eval'));
@@ -62,4 +62,34 @@ test('CSV exports media format for programmatic stream conversion', () => {
  assert.ok(csv.includes('format'));
  assert.ok(csv.includes('"hls"'));
 });
+
+// New tests:
+test('safeDownloadName preserves MKV and WebM extensions accurately', () => {
+ assert.equal(safeDownloadName({type:'video',url:'https://cdn.test/feature.mkv'},1,'cdn.test'), 'KNOuX-GrabFlow/cdn.test/feature.mkv');
+ assert.equal(safeDownloadName({type:'video',url:'https://cdn.test/clip.webm?token=xyz'},2,'cdn.test'), 'KNOuX-GrabFlow/cdn.test/clip.webm');
+ assert.equal(safeDownloadName({type:'video',format:'mkv',url:'https://cdn.test/get?id=99'},3,'cdn.test'), 'KNOuX-GrabFlow/cdn.test/video-3.mkv');
+});
+test('classifyMediaAsset constructs complete structured metadata', () => {
+ const asset = {
+   type: 'video',
+   format: 'hls',
+   url: 'https://media.test/master.m3u8',
+   name: 'Master Stream',
+   width: 1920,
+   height: 1080,
+   codec: 'avc1.640028',
+   subtitles: [{src: 'https://media.test/sub.vtt', srclang: 'en', label: 'English', kind: 'subtitles'}]
+ };
+ const classified = classifyMediaAsset(asset);
+ assert.equal(classified.mediaType, 'video');
+ assert.equal(classified.format, 'hls');
+ assert.equal(classified.isPlaylist, true);
+ assert.equal(classified.resolution, '1920×1080');
+ assert.equal(classified.codec, 'avc1.640028');
+ assert.equal(classified.hasSubtitles, true);
+ assert.equal(classified.subtitles.length, 1);
+ assert.equal(classified.downloadEligibility, 'requires-companion');
+ assert.equal(classified.supportedConversionPath, 'companion-assembly');
+});
+
 console.log(`${tests} utility/security checks passed`);

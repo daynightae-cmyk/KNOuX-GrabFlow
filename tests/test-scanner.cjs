@@ -11,10 +11,15 @@ function makeNode(attrs = {}, extra = {}) {
     getAttribute: key => attrs[key] ?? null,
     textContent: extra.textContent || '',
     currentSrc: extra.currentSrc || '',
+    videoWidth: extra.videoWidth || 0,
+    videoHeight: extra.videoHeight || 0,
+    naturalWidth: extra.naturalWidth || 0,
+    naturalHeight: extra.naturalHeight || 0,
+    shadowRoot: extra.shadowRoot || null,
     querySelectorAll: selector => (extra.children || {})[selector] || [],
   };
 }
-function run({imgs=[], videos=[], audios=[], pictures=[], metas=[], links=[], css=[], scripts=[], resourceUrls=[], hostname='example.com', title='Example', url='https://example.com/page'} = {}) {
+function run({imgs=[], videos=[], audios=[], pictures=[], metas=[], links=[], css=[], scripts=[], resourceUrls=[], dynamicPlayers=[], hostname='example.com', title='Example', url='https://example.com/page'} = {}) {
   const document = {
     baseURI: url, title,
     querySelectorAll: selector => ({
@@ -23,6 +28,7 @@ function run({imgs=[], videos=[], audios=[], pictures=[], metas=[], links=[], cs
       'meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"],meta[property="og:video"],meta[property="og:video:url"],meta[property="og:video:secure_url"],meta[property="og:audio"],meta[property="og:audio:secure_url"]': metas,
       'a[href]': links, '[style*="background"]': css,
       'script[type="application/ld+json"]': scripts,
+      'video-js, plyr, media-player, video-player, [data-player]': dynamicPlayers,
     })[selector] || []
   };
   const performance = {getEntriesByType: type => type === 'resource' ? resourceUrls.map(name=>({name})) : []};
@@ -33,7 +39,7 @@ function test(name, fn) { fn(); passed++; console.log('PASS', name); }
 test('manifest uses MV3 with least-privilege click-to-scan and no all-sites permission', () => {
   const m = JSON.parse(fs.readFileSync(path.join(root,'manifest.json'),'utf8'));
   assert.equal(m.manifest_version, 3);
-  assert.deepEqual(m.permissions, ['activeTab','scripting','downloads','storage']);
+  assert.deepEqual(m.permissions, ['activeTab','scripting','downloads','storage','nativeMessaging']);
   assert.equal(m.host_permissions, undefined);
   assert.equal(m.background, undefined);
 });
@@ -149,4 +155,56 @@ test('does not expose video manifests or observed files from YouTube host', () =
   const page=run({hostname:'youtube.com',resourceUrls:['https://cdn.example.com/vid.mp4','https://cdn.example.com/master.m3u8'],links:[makeNode({href:'/list.m3u8'})]});
   assert.equal(page.assets.length,0);
 });
+
+// New regression tests for Slice 01 enhancements:
+test('discovers directly available MKV videos and classifies them as direct format', () => {
+  const vid = makeNode({src: '/archive/feature.mkv', title: 'Feature Film'});
+  const page = run({videos: [vid]});
+  assert.equal(page.assets.length, 1);
+  assert.equal(page.assets[0].type, 'video');
+  assert.equal(page.assets[0].format, 'direct');
+  assert.equal(page.assets[0].conversionPath, 'direct-download');
+  assert.equal(page.assets[0].downloadEligibility, 'eligible');
+  assert.equal(page.assets[0].isPlaylist, false);
+});
+test('extracts subtitle tracks from video element', () => {
+  const track1 = makeNode({src: '/subtitles/en.vtt', kind: 'subtitles', srclang: 'en', label: 'English'});
+  const track2 = makeNode({src: '/subtitles/ar.vtt', kind: 'captions', srclang: 'ar', label: 'Arabic'});
+  const vid = makeNode({src: '/movie.mp4', title: 'Subtitled Movie'}, {
+    children: {'track': [track1, track2]}
+  });
+  const page = run({videos: [vid]});
+  assert.equal(page.assets.length, 1);
+  assert.equal(page.assets[0].hasSubtitles, true);
+  assert.equal(page.assets[0].subtitles.length, 2);
+  assert.equal(page.assets[0].subtitles[0].srclang, 'en');
+  assert.equal(page.assets[0].subtitles[1].srclang, 'ar');
+});
+test('extracts video resolution and codec from MIME codecs parameter', () => {
+  const source = makeNode({src: '/stream.mp4', type: 'video/mp4; codecs="avc1.640028, mp4a.40.2"', width: '1920', height: '1080'});
+  const vid = makeNode({title: 'HD Stream'}, {
+    children: {'source[src],source[data-src]': [source]}
+  });
+  const page = run({videos: [vid]});
+  assert.equal(page.assets.length, 1);
+  assert.equal(page.assets[0].codec, 'avc1.640028, mp4a.40.2');
+  assert.equal(page.assets[0].resolution, '1920×1080');
+});
+test('marks HLS and DASH with requires-companion eligibility and companion-assembly conversion', () => {
+  const vid = makeNode({src: '/live/manifest.m3u8'});
+  const page = run({videos: [vid]});
+  assert.equal(page.assets[0].format, 'hls');
+  assert.equal(page.assets[0].isPlaylist, true);
+  assert.equal(page.assets[0].downloadEligibility, 'requires-companion');
+  assert.equal(page.assets[0].conversionPath, 'companion-assembly');
+});
+test('discovers video sources from dynamic player custom elements (video-js, plyr, media-player)', () => {
+  const player = makeNode({'data-video-src': 'https://cdn.example.com/interactive-promo.mp4', 'title': 'Custom Player'});
+  const page = run({dynamicPlayers: [player]});
+  assert.equal(page.assets.length, 1);
+  assert.equal(page.assets[0].type, 'video');
+  assert.equal(page.assets[0].url, 'https://cdn.example.com/interactive-promo.mp4');
+  assert.equal(page.assets[0].source, 'dynamic-player');
+});
+
 console.log(`\n${passed} scanner/security checks passed.`);

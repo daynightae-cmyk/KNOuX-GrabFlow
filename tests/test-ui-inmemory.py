@@ -1,10 +1,10 @@
 """Browser UI integration with Chrome API mock. In-memory page, not real extension install."""
+import base64
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-html = (ROOT / 'popup.html').read_text()
-import base64
+html = (ROOT / 'popup.html').read_text(encoding='utf-8')
 icon = base64.b64encode((ROOT / 'icons/icon128.png').read_bytes()).decode('ascii')
 html = html.replace('src="icons/icon128.png"', f'src="data:image/png;base64,{icon}"')
 html = html.replace('<link rel="stylesheet" href="popup.css" />', '')
@@ -29,7 +29,8 @@ window.chrome = {
     ]
   }}]},
   downloads:{download:async(data)=>{window.__downloads.push(data);return window.__downloads.length;},
-    search:async({id}) => [{id,state:'complete'}],onChanged:{addListener:()=>{}}}
+    search:async({id}) => [{id,state:'complete'}],onChanged:{addListener:()=>{}}},
+  runtime:{sendNativeMessage:(host,msg,cb)=>{if(cb)cb({action:'pong',version:'0.5.0'});}}
 };
 '''
 with sync_playwright() as p:
@@ -38,10 +39,10 @@ with sync_playwright() as p:
     errors=[]
     page.on('pageerror',lambda err: errors.append(str(err)))
     page.set_content(html,wait_until='load')
-    page.add_style_tag(content=(ROOT/'popup.css').read_text())
+    page.add_style_tag(content=(ROOT/'popup.css').read_text(encoding='utf-8'))
     page.evaluate(mock)
     for js in ('asset-utils.js','scan-page.js','popup.js'):
-        page.add_script_tag(content=(ROOT/js).read_text())
+        page.add_script_tag(content=(ROOT/js).read_text(encoding='utf-8'))
     page.locator('.asset').first.wait_for()
     assert page.locator('.asset').count()==6
     assert page.locator('#totalCount').inner_text()=='06'

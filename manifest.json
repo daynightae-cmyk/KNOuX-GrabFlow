@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "KNOuX GrabFlow — Page Asset Finder",
   "short_name": "KNOuX GrabFlow",
-  "description": "Discover and download directly accessible images, video files and documents from the page you choose. Private, local and lightweight.",
-  "version": "0.2.0",
+  "description": "Discover and download directly accessible images, audio, direct video files and documents from the page you choose. Private, local and lightweight.",
+  "version": "0.3.0",
   "minimum_chrome_version": "110",
   "permissions": ["activeTab", "scripting", "downloads", "storage"],
   "action": {

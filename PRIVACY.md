@@ -25,3 +25,7 @@ Users control when scanning occurs by clicking the extension icon and can remove
 ### Contact and publication
 
 This is a source-based draft. Before any public Chrome Web Store submission, the publisher must provide a real support contact, accurate developer identity and an accessible public URL to the finalized privacy policy. Verify actual runtime behavior and keep this disclosure aligned with the shipped version.
+
+### v0.3.0 — Audio and image-source handling
+
+On user-triggered scanning, the extension also reads explicitly present audio URLs, responsive `<picture>` sources and social-preview image references from the selected page's DOM. It does **not** play media, fetch separate stylesheets, capture network requests, run a background scanner or transmit extracted results to KNOuX servers. The existing local-only controls and storage limitations remain unchanged.

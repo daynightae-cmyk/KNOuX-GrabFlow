@@ -7,17 +7,18 @@ const data = [
   {type:'image', name:'zebra', url:'https://x.test/a.webp', width:1200, height:600},
   {type:'image', name:'alpha', url:'https://x.test/b.jpg', width:200, height:100},
   {type:'document', name:'Readme', url:'https://x.test/file.pdf'},
-  {type:'video', name:'Showreel', url:'https://x.test/video.mp4'}
+  {type:'video', name:'Showreel', url:'https://x.test/video.mp4'},
+  {type:'audio', name:'Soundtrack', url:'https://x.test/audio.mp3'}
 ];
 test('sort name without mutating input', () => {
  const original = [...data];
  const sorted = filterSortAssets(data,{sort:'name'});
- assert.deepEqual(sorted.map(x=>x.name),['alpha','Readme','Showreel','zebra']);
+ assert.deepEqual(sorted.map(x=>x.name),['alpha','Readme','Showreel','Soundtrack','zebra']);
  assert.deepEqual(data,original);
 });
 test('large images filter keeps nonimage items', () => {
  const out = filterSortAssets(data,{largeImages:true});
- assert.deepEqual(out.map(x=>x.name),['zebra','Readme','Showreel']);
+ assert.deepEqual(out.map(x=>x.name),['zebra','Readme','Showreel','Soundtrack']);
 });
 test('filter and search compose', () => {
  const out = filterSortAssets(data,{type:'image',query:'WEBP'});
@@ -27,6 +28,9 @@ test('safe file names protect Windows device names and path traversal', () => {
  assert.equal(safeDownloadName({type:'document',url:'https://x.test/%2E%2E%2FCON.pdf'},1,'x.test'), 'KNOuX-GrabFlow/x.test/_CON.pdf');
  assert.equal(safeDownloadName({type:'image',url:'https://x.test/photo.webp'},2,'x.test'), 'KNOuX-GrabFlow/x.test/photo.webp');
  assert.ok(!safeDownloadName({type:'document',url:'https://x.test/%2E%2E%5Cevil.zip'},1,'x.test').includes('..'));
+});
+test('direct audio links preserve their extension in downloads', () => {
+ assert.equal(safeDownloadName({type:'audio',url:'https://cdn.test/podcast.m4a'},4,'mysite.test'), 'KNOuX-GrabFlow/mysite.test/podcast.m4a');
 });
 test('CSV quotes potentially dangerous names as text', () => {
  const csv = exportAssetsCsv([{type:'image',name:'A, "B"',url:'https://site/a.png',width:1,height:2,source:'image'}]);

@@ -56,3 +56,7 @@ CI runs unit/security/package tests and mocked-Chrome browser UI smoke checks. *
 4. Separate VS Code companion extension (`.vsix`) after Chrome MVP validation.
 
 See `ROADMAP.md`, `PRIVACY.md` and `TEST-REPORT.md`.
+
+## v0.3.0 Beta — audio and responsive-media hardening
+
+This version adds direct **audio** discovery, image `<picture>` and lazy source fallbacks, OpenGraph media detection and stronger scanner regressions. See [v0.3 release notes](RELEASE_NOTES-v0.3.0.md) and [v0.3 test report](TEST-REPORT-v0.3.0.md). Chrome Web Store publication and actual full-download verification remain pending.

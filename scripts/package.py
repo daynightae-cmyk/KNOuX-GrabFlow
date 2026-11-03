@@ -19,7 +19,10 @@ with ZipFile(OUT,'w',ZIP_DEFLATED,compresslevel=9) as archive:
     for name in FILES:
         info=ZipInfo(name,(2026,1,1,0,0,0));info.compress_type=ZIP_DEFLATED
         info.external_attr=0o644 << 16
-        archive.writestr(info,(ROOT/name).read_bytes(),compress_type=ZIP_DEFLATED,compresslevel=9)
+        data=(ROOT/name).read_bytes()
+        if name.endswith(('.html','.css','.js','.json')):
+            data=data.replace(b'\r\n',b'\n') # canonical text payloads across platforms
+        archive.writestr(info,data,compress_type=ZIP_DEFLATED,compresslevel=9)
 with ZipFile(OUT) as archive:
     if archive.testzip() is not None: sys.exit('Archive CRC error')
     if sorted(archive.namelist()) != sorted(FILES): sys.exit('Unexpected release file set')

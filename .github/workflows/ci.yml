@@ -25,10 +25,14 @@ jobs:
         run: node tests/test-utilities.cjs
       - name: Create deterministic Chrome zip
         run: python3 scripts/package.py
+      - name: Stage Chrome ZIP for Actions artifact
+        run: |
+          mkdir -p artifacts
+          cp ../KNOuX-GrabFlow-CHROME-v*.zip artifacts/
       - uses: actions/upload-artifact@v4
         with:
           name: KNOuX-GrabFlow-chrome
-          path: ../KNOuX-GrabFlow-CHROME-v*.zip
+          path: artifacts/*.zip
           if-no-files-found: error
   popup-browser-smoke:
     runs-on: ubuntu-latest

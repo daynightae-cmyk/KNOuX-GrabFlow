@@ -3,7 +3,7 @@
   "name": "KNOuX GrabFlow - Page Asset Finder",
   "short_name": "KNOuX GrabFlow",
   "description": "Detect direct videos and HLS/DASH stream playlists, plus images, audio and documents from the page you choose. Private, local and lightweight.",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "minimum_chrome_version": "110",
   "permissions": ["activeTab", "scripting", "downloads", "storage", "nativeMessaging"],
   "action": {

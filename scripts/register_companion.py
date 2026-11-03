@@ -8,6 +8,7 @@ under HKCU (current user registry, no administrative privileges required).
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import sys
 
@@ -15,27 +16,39 @@ HOST_NAME = "com.knoux.grabflow.companion"
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 
+def validate_extension_id(extension_id):
+    """Chrome extension IDs are exactly 32 lowercase letters a-p."""
+    if not isinstance(extension_id, str) or not re.fullmatch(r'[a-p]{32}', extension_id):
+        raise ValueError('Use --extension-id followed by the 32-letter ID from chrome://extensions')
+    return extension_id
+
+
+def build_manifest(extension_id, host_path):
+    extension_id = validate_extension_id(extension_id)
+    return {
+        "name": HOST_NAME,
+        "description": "KNOuX GrabFlow Windows Native Media Companion Host",
+        "path": str(host_path),
+        "type": "stdio",
+        "allowed_origins": [f"chrome-extension://{extension_id}/"],
+    }
+
+
 def register(extension_id=None):
+    extension_id = validate_extension_id(extension_id)
     python_exe = sys.executable
     host_py = SCRIPT_DIR / "companion_host.py"
-    bat_file = SCRIPT_DIR / "companion_host.bat"
+    # Generated machine-specific files stay outside the Git source tree.
+    install_dir = Path(os.environ.get('LOCALAPPDATA') or Path.home() / '.knoux') / 'KNOuX' / 'GrabFlow'
+    install_dir.mkdir(parents=True, exist_ok=True)
+    bat_file = install_dir / "companion_host.bat"
 
     # Write batch wrapper with absolute paths and CRLF
     bat_content = f"@echo off\r\n\"{python_exe}\" \"{host_py}\" %*\r\n"
     bat_file.write_text(bat_content, encoding='utf-8')
 
-    manifest_file = SCRIPT_DIR / "com.knoux.grabflow.companion.json"
-    allowed_origins = ["chrome-extension://*/"]
-    if extension_id:
-        allowed_origins.append(f"chrome-extension://{extension_id}/")
-
-    manifest = {
-        "name": HOST_NAME,
-        "description": "KNOuX GrabFlow Windows Native Media Companion Host",
-        "path": str(bat_file),
-        "type": "stdio",
-        "allowed_origins": allowed_origins
-    }
+    manifest_file = install_dir / "com.knoux.grabflow.companion.json"
+    manifest = build_manifest(extension_id, bat_file)
     manifest_file.write_text(json.dumps(manifest, indent=2), encoding='utf-8')
 
     if sys.platform == 'win32':
@@ -73,13 +86,16 @@ def unregister():
 
 def main():
     parser = argparse.ArgumentParser(description="Register/unregister KNOuX GrabFlow companion host.")
-    parser.add_argument("--unregister", action="store_true", help="Remove registration from registry")
+    parser.add_argument("--unregister", "--uninstall", action="store_true", help="Remove registration from registry")
     parser.add_argument("--extension-id", help="Chrome extension ID to allow explicitly")
     args = parser.parse_args()
 
     if args.unregister:
         return unregister()
-    return register(args.extension_id)
+    try:
+        return register(args.extension_id)
+    except ValueError as error:
+        parser.error(str(error))
 
 
 if __name__ == '__main__':

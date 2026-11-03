@@ -1,119 +1,60 @@
-# KNOuX GrabFlow — Native Companion Installation Guide
+# KNOuX GrabFlow - Windows Native Companion Setup
 
-The Native Companion enables adaptive-stream (HLS/DASH) assembly via FFmpeg.  
-It is **optional** — direct-file downloads work without it.
+The companion is optional. Direct Chrome file downloads do not require it.
+Adaptive HLS/DASH assembly requires locally installed FFmpeg and FFprobe.
 
----
+## 1. Install the unpacked Chrome extension
 
-## Prerequisites
+1. Go to chrome://extensions and enable Developer mode.
+2. Choose Load unpacked and select the repository extension root.
+3. Copy the exact 32-letter Extension ID shown on the extension card.
+4. Install official FFmpeg binaries and ensure ffmpeg/ffprobe are in PATH.
 
-| Requirement | Details |
-|-------------|---------|
-| Windows 10 / 11 | 64-bit |
-| Python 3.9+ | https://python.org — add to PATH during install |
-| FFmpeg | https://ffmpeg.org/download.html — add `ffmpeg.exe` to PATH |
-| KNOuX GrabFlow | Loaded in Chrome as an unpacked extension (Developer Mode) |
+## 2. Register the Native Messaging host (explicit opt-in)
 
----
+From a PowerShell window in the GrabFlow checkout:
 
-## Step 1 — Clone the Repository
+    python scripts\register_companion.py --extension-id YOUR_32_LETTER_EXTENSION_ID
 
-```powershell
-git clone https://github.com/daynightae-cmyk/KNOuX-GrabFlow.git
-cd KNOuX-GrabFlow
-```
+Or run:
 
-Or download and extract the source ZIP from the GitHub releases page.
+    scripts\install-companion.bat --extension-id YOUR_32_LETTER_EXTENSION_ID
 
----
+The installer does NOT auto-detect your extension ID. The exact 32-character
+ID is mandatory. Wildcards are invalid and rejected by Chrome. Registration
+generates a host launcher and manifest under %LOCALAPPDATA%\KNOuX\GrabFlow
+and writes a matching HKCU Chrome NativeMessagingHosts registry key. It does
+not require administrator rights.
 
-## Step 2 — Load the Extension in Chrome
+The tracked scripts/com.knoux.grabflow.companion.json is an inert template;
+the generated, user-specific manifest is the one registered locally.
 
-1. Open `chrome://extensions`
-2. Enable **Developer mode** (top-right toggle)
-3. Click **Load unpacked**
-4. Select the `KNOuX-GrabFlow` folder
-5. Note the **Extension ID** shown under the extension card
+## 3. Verify
 
----
+Restart Chrome. Open an accessible media page, click GrabFlow's toolbar action,
+and inspect the companion-status indicator. A successful native ping does NOT
+prove that FFmpeg assembly or file integrity is working. Test permitted,
+unprotected HLS/DASH streams independently.
 
-## Step 3 — Register the Native Companion
+## Uninstall
 
-Open PowerShell (no administrator rights needed):
+    python scripts\register_companion.py --unregister
 
-```powershell
-cd D:\path\to\KNOuX-GrabFlow
-python scripts\register_companion.py
-```
+This removes the current-user registry key, leaving generated files intact
+for inspection. It does not delete any downloaded media.
 
-The script will:
-- Auto-detect your Extension ID from the Chrome profile
-- Write `scripts\com.knoux.grabflow.companion.json` with correct paths
-- Register the manifest in `HKCU\Software\Google\Chrome\NativeMessagingHosts`
+## Security and known limitations
 
-> **Tip:** If Chrome cannot find the companion after registration, restart Chrome.
+- The native host permits exactly the extension ID explicitly registered.
+- Browser messages cannot override the localhost/private-network restrictions.
+- Browser output names resolve beneath the current user's Downloads directory.
+- FFmpeg is invoked using an argument list, with no overwrite flag.
+- Native Messaging install, live Windows stream assembly, and playback have not
+  yet been verified on this device (FFmpeg and FFprobe are missing from PATH).
+- DNS rebinding, redirected/private stream segments, and cancel/progress
+  lifecycle require further hardening before untrusted stream support.
+- Chrome sendNativeMessage launches a distinct native process for every call;
+  a separate cancel request cannot reliably stop the previous assembly.
 
----
-
-## Step 4 — Verify the Connection
-
-1. Click the KNOuX GrabFlow toolbar icon
-2. The companion status pill in the top-right of the popup should show **● Companion ready**
-3. Navigate to a page with an HLS or DASH stream
-4. Select the stream in GrabFlow → click **Assemble**
-
----
-
-## Companion Security Properties
-
-- No shell interpolation — FFmpeg is invoked via argument array only
-- SSRF protection — `file://`, `localhost`, private IP ranges are blocked
-- No credential harvesting — authentication headers are not logged
-- No-clobber — existing output files are never overwritten silently
-- Restricted to the approved Extension ID — other callers are rejected
-- Output directory is restricted to user's Downloads folder
-
----
-
-## Uninstalling the Companion
-
-```powershell
-python scripts\register_companion.py --uninstall
-```
-
-This removes the registry key. No system files are modified.
-
----
-
-## Troubleshooting
-
-| Symptom | Likely Cause | Fix |
-|---------|-------------|-----|
-| Pill shows "Companion not found" | NM not registered | Re-run `register_companion.py` |
-| Assemble fails immediately | FFmpeg not in PATH | Add FFmpeg `bin/` folder to PATH |
-| "Stream not supported" | DRM-protected content | Expected — DRM bypass is not implemented |
-| Assembly stops at 0% | Stream requires authentication | Use a stream URL accessible without credentials |
-
----
-
-## Manual Registration (Advanced)
-
-If the script cannot auto-detect your Extension ID, edit `scripts\com.knoux.grabflow.companion.json`:
-
-```json
-{
-  "name": "com.knoux.grabflow.companion",
-  "description": "KNOuX GrabFlow Native Media Companion",
-  "path": "C:\\path\\to\\KNOuX-GrabFlow\\scripts\\companion_host.py",
-  "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://YOUR_EXTENSION_ID_HERE/"
-  ]
-}
-```
-
-Then register manually:
-
-```powershell
-reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.knoux.grabflow.companion" /ve /t REG_SZ /d "C:\path\to\scripts\com.knoux.grabflow.companion.json" /f
-```
+Official Chrome specification:
+https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging

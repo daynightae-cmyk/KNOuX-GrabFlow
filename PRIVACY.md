@@ -1,35 +1,84 @@
-# KNOuX GrabFlow™ — Privacy Disclosure (Draft for v0.1.0)
+# KNOuX GrabFlow — Privacy Policy
 
-**Summary:** KNOuX GrabFlow does not maintain an account, collect analytics, transmit browsing history to a developer-operated server or load code from a third party.
+**Version 0.5.0 · November 2026**  
+**Product:** KNOuX GrabFlow Chrome Extension  
+**Developer:** KNOuX LABS
 
-### Website data
+---
 
-When a user clicks the extension on the currently active webpage, the extension reads that page's DOM (image URLs, video file URLs and direct document links, along with the page's hostname/title) in the active browser tab. The extracted information is passed to the extension popup **locally on the user's device** to enable display, search, selection and copying. It is not stored by the extension for future sessions. It does not inspect passwords, cookies or hidden authenticated content intentionally.
+## Summary
 
-### Downloads
+KNOuX GrabFlow is a local browser utility. It does not collect, transmit, or sell any personal data. All media discovery and download operations occur entirely within your browser and local machine.
 
-When the user chooses to download, Google Chrome's `downloads` API requests the selected file URL from its original web host as a regular browser download. That website/server may receive an ordinary browser download request, including standard browser request metadata. No file is uploaded to KNOuX-operated infrastructure. Actual download success depends on the original website's rules.
+---
 
-### Stored preferences
+## Permissions Used and Why
 
-The extension stores only the interface language setting (`ar` or `en`) in Chrome's local extension storage. It does not intentionally collect names, email addresses, payment details or behavioral analytics.
+### `activeTab`
+**Why:** Required to inspect the currently active page for media sources when you click the toolbar icon.  
+**Scope:** Only the tab you are viewing, only when you click the icon. Never runs in the background across all tabs.
 
-### Third parties
+### `downloads`
+**Why:** Required to initiate file downloads and monitor download progress/completion state via `chrome.downloads.search()`.  
+**Scope:** Limited to downloads initiated by GrabFlow. Cannot access downloads from other sources.
 
-No analytics, advertising SDKs or external script services are integrated. The files users download originate from websites chosen by those users, subject to those sites' own policies.
+### `scripting`
+**Why:** Required to inject the media discovery script (`scan-page.js`) into the active page to detect video, audio, and streaming manifest sources.  
+**Scope:** Injected only on demand when you click the toolbar icon. Not running continuously.
 
-### Controls
+### `storage`
+**Why:** Used to persist the download history list locally so it survives popup close/reopen.  
+**Scope:** Stored only in `chrome.storage.local` on your device. Never synced to any external server.
 
-Users control when scanning occurs by clicking the extension icon and can remove the language preference by clearing extension storage/uninstalling the extension.
+### `nativeMessaging`
+**Why:** Required to communicate with the optional KNOuX GrabFlow Native Media Companion (`com.knoux.grabflow.companion`) for HLS/DASH adaptive-stream assembly via FFmpeg.  
+**Scope:** Messages are exchanged only with the companion host identified by `com.knoux.grabflow.companion`. The companion host is restricted to accept connections only from this extension's ID. Native messaging is only invoked when you explicitly trigger an adaptive-stream assembly.  
+**Data transmitted:** Stream URL, output filename, quality selection, and progress updates only. No credentials, browsing history, or personal data are transmitted.
 
-### Contact and publication
+---
 
-This is a source-based draft. Before any public Chrome Web Store submission, the publisher must provide a real support contact, accurate developer identity and an accessible public URL to the finalized privacy policy. Verify actual runtime behavior and keep this disclosure aligned with the shipped version.
+## Data Practices
 
-### v0.3.0 — Audio and image-source handling
+| Category | Practice |
+|----------|----------|
+| Browsing history | Never collected or transmitted |
+| Personal information | Never collected |
+| Cookies / authentication tokens | Never accessed |
+| Network requests (extension) | None — the extension itself makes no outbound network calls |
+| Native companion network | Companion fetches only the stream URL you explicitly selected |
+| Analytics / telemetry | None |
+| Third-party data sharing | None |
+| Data retention | Download list stored locally in `chrome.storage.local`; cleared when you click "Clear History" or uninstall the extension |
 
-On user-triggered scanning, the extension also reads explicitly present audio URLs, responsive `<picture>` sources and social-preview image references from the selected page's DOM. It does **not** play media, fetch separate stylesheets, capture network requests, run a background scanner or transmit extracted results to KNOuX servers. The existing local-only controls and storage limitations remain unchanged.
+---
 
-### v0.4 update: recent download status
+## DRM and Access Controls
 
-When the user starts a download, GrabFlow stores up to 30 Chrome-generated download **IDs** in `chrome.storage.local` under `downloadRuns`. When the popup opens, those IDs are looked up locally using `chrome.downloads.search` to display real completed/running/interrupted counts. No new website permissions are added. GrabFlow does not collect browsing history, upload media URLs, or send telemetry to KNOUX servers.
+GrabFlow does not bypass, circumvent, or decode DRM-protected content, paywalls, authentication gates, or access restrictions of any kind. If a stream is protected, GrabFlow will report "DRM-protected — not supported" and will not attempt assembly or download.
+
+---
+
+## FFmpeg (Native Companion Only)
+
+When the optional Native Companion is used, FFmpeg is invoked locally on your machine to assemble adaptive streams. FFmpeg is not distributed with or embedded in this extension. You install FFmpeg separately from https://ffmpeg.org. It runs entirely under your own user account with your own file-system permissions. The companion does not communicate with any server other than the stream URL you selected.
+
+---
+
+## Website Data
+
+When you click the extension toolbar icon on the currently active webpage, the extension reads that page's DOM — video/audio element sources, resource timing entries, OpenGraph metadata, JSON-LD VideoObject structured data, and page title/hostname — to identify available media. This data is used only locally within the popup to display, filter, and enable downloads. It is not sent to any remote server and is not stored between sessions (only active download job records are stored in `chrome.storage.local`).
+
+---
+
+## Changes from v0.4
+
+- Added `nativeMessaging` permission (optional companion for HLS/DASH assembly)
+- Extended storage use to persist download history (local only, user-clearable)
+- No new data collection; no new remote endpoints
+
+---
+
+## Contact
+
+For privacy questions or concerns, open an issue at:  
+https://github.com/daynightae-cmyk/KNOuX-GrabFlow/issues

@@ -10,41 +10,120 @@
   <div class="app">
     <header class="header">
       <div class="brand">
-        <img src="icons/icon128.png" width="41" height="41" alt="" />
-        <div><div class="eyebrow">KNOuX LABS <span class="vtag">BETA 0.4</span></div><div class="brand-name">Grab<span>Flow</span><span class="trademark">™</span></div></div>
+        <div class="stag-emblem-wrap">
+          <img src="icons/icon128.png" width="38" height="38" alt="KNOuX Stag" class="stag-emblem" />
+          <span class="stag-glow"></span>
+        </div>
+        <div>
+          <div class="eyebrow">KNOuX LABS <span class="vtag">PROD 0.5</span></div>
+          <div class="brand-name">Grab<span>Flow</span><span class="trademark">™</span></div>
+        </div>
       </div>
-      <button id="langBtn" type="button" class="lang-button" aria-label="Switch language">عربي</button>
+      <div class="header-actions">
+        <button id="managerToggleBtn" type="button" class="tool-btn" title="Download Manager" aria-label="Toggle Download Manager">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        </button>
+        <button id="langBtn" type="button" class="lang-button" aria-label="Switch language">عربي</button>
+      </div>
     </header>
 
     <section class="hero" aria-live="polite">
-      <div class="hero-top"><span class="status-dot"></span><span data-i18n="heroNote">LOCAL • PRIVATE • ON DEMAND</span></div>
-      <div class="hero-main"><div><div class="total" id="totalCount">—</div><div class="hero-label" data-i18n="detected">Assets detected on this page</div></div><button id="refreshBtn" type="button" class="refresh" title="Scan again" aria-label="Scan again">↻</button></div>
+      <div class="hero-top">
+        <span class="status-dot"></span>
+        <span data-i18n="heroNote">LOCAL • PRIVATE • ON DEMAND</span>
+        <span class="companion-pill" id="companionStatus" title="Companion Status">COMPANION: CHECKING</span>
+      </div>
+      <div class="hero-main">
+        <div>
+          <div class="total" id="totalCount">—</div>
+          <div class="hero-label" data-i18n="detected">Assets detected on this page</div>
+        </div>
+        <button id="refreshBtn" type="button" class="refresh" title="Scan again" aria-label="Scan again">↻</button>
+      </div>
       <div class="host" id="pageHost">—</div>
     </section>
 
-    <section class="tools" aria-label="Asset filters">
-      <div class="tabs" role="group" aria-label="Type">
-        <button type="button" class="tab active" data-filter="all" aria-pressed="true"><span data-i18n="all">All</span> <span class="pill" id="countAll">0</span></button>
-        <button type="button" class="tab" data-filter="image" aria-pressed="false"><span data-i18n="images">Images</span> <span class="pill" id="countImage">0</span></button>
-        <button type="button" class="tab" data-filter="video" aria-pressed="false"><span data-i18n="videos">Video</span> <span class="pill" id="countVideo">0</span></button>
-        <button type="button" class="tab" data-filter="audio" aria-pressed="false"><span data-i18n="audio">Audio</span> <span class="pill" id="countAudio">0</span></button>
-        <button type="button" class="tab" data-filter="document" aria-pressed="false"><span data-i18n="docs">Files</span> <span class="pill" id="countDocument">0</span></button>
-      </div>
-      <label class="search-shell"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="m16 16 5 5"/></svg><input id="search" type="search" autocomplete="off" placeholder="Filter by name or URL..." aria-label="Filter results" /></label>
-      <div class="smart-tools">
-        <label class="sort-group" for="sortMode"><span data-i18n="sortBy">Sort</span><select id="sortMode" aria-label="Sort assets"><option value="page" data-i18n="pageOrder">Page order</option><option value="name" data-i18n="sortName">Name A–Z</option><option value="type" data-i18n="sortType">File type</option></select></label>
-        <label class="large-only"><input id="largeImages" type="checkbox"/><span data-i18n="largeOnly">Large images</span></label>
-      </div>
-      <div class="selection-bar"><span id="selectedLabel">0 selected</span><div class="select-actions"><button id="csvBtn" type="button" data-i18n="exportCsv">CSV</button><span>·</span><button id="selectVisible" type="button" data-i18n="selectVisible">Select visible</button><span>·</span><button id="clearSelection" type="button" data-i18n="clear">Clear</button></div></div>
+    <!-- Main Discovery Section -->
+    <section id="scannerView" class="view-panel">
+      <section class="tools" aria-label="Asset filters">
+        <div class="tabs" role="tablist" aria-label="Asset category">
+          <button type="button" class="tab active" data-filter="all" role="tab" aria-selected="true" aria-pressed="true"><span data-i18n="all">All</span> <span class="pill" id="countAll">0</span></button>
+          <button type="button" class="tab video-tab" data-filter="video" role="tab" aria-selected="false" aria-pressed="false"><span data-i18n="videos">Video</span> <span class="pill" id="countVideo">0</span></button>
+          <button type="button" class="tab" data-filter="image" role="tab" aria-selected="false" aria-pressed="false"><span data-i18n="images">Images</span> <span class="pill" id="countImage">0</span></button>
+          <button type="button" class="tab" data-filter="audio" role="tab" aria-selected="false" aria-pressed="false"><span data-i18n="audio">Audio</span> <span class="pill" id="countAudio">0</span></button>
+          <button type="button" class="tab" data-filter="document" role="tab" aria-selected="false" aria-pressed="false"><span data-i18n="docs">Files</span> <span class="pill" id="countDocument">0</span></button>
+        </div>
+        <label class="search-shell">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="m16 16 5 5"/></svg>
+          <input id="search" type="search" autocomplete="off" placeholder="Filter by name or URL..." aria-label="Filter results" />
+        </label>
+        <div class="smart-tools">
+          <label class="sort-group" for="sortMode"><span data-i18n="sortBy">Sort</span>
+            <select id="sortMode" aria-label="Sort assets">
+              <option value="page" data-i18n="pageOrder">Page order</option>
+              <option value="name" data-i18n="sortName">Name A–Z</option>
+              <option value="type" data-i18n="sortType">File type</option>
+            </select>
+          </label>
+          <label class="large-only"><input id="largeImages" type="checkbox"/><span data-i18n="largeOnly">Large images</span></label>
+        </div>
+        <div class="selection-bar">
+          <span id="selectedLabel">0 selected</span>
+          <div class="select-actions">
+            <button id="csvBtn" type="button" data-i18n="exportCsv">CSV</button>
+            <span>·</span>
+            <button id="selectVisible" type="button" data-i18n="selectVisible">Select visible</button>
+            <span>·</span>
+            <button id="clearSelection" type="button" data-i18n="clear">Clear</button>
+          </div>
+        </div>
+      </section>
+
+      <main id="results" class="results" aria-live="polite">
+        <div class="empty">
+          <div class="empty-orbit">◇</div>
+          <div data-i18n="scanning">Scanning page…</div>
+        </div>
+      </main>
     </section>
 
-    <main id="results" class="results" aria-live="polite"><div class="empty"><div class="empty-orbit">◇</div><div data-i18n="scanning">Scanning page…</div></div></main>
+    <!-- Real Download Manager Drawer / View -->
+    <section id="managerView" class="view-panel" hidden>
+      <div class="manager-header">
+        <div class="manager-title">
+          <span data-i18n="downloadManagerTitle">Download Manager</span>
+          <span class="pill" id="managerCount">0</span>
+        </div>
+        <div class="manager-actions">
+          <button id="clearHistoryBtn" type="button" class="text-btn" data-i18n="clearHistory">Clear History</button>
+        </div>
+      </div>
+      <div id="managerList" class="manager-list" aria-live="polite">
+        <div class="empty-downloads">
+          <div class="empty-orbit">▽</div>
+          <div data-i18n="noDownloads">No active or recent downloads.</div>
+        </div>
+      </div>
+    </section>
 
     <footer class="footer">
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
       <div id="downloadStatus" class="download-status" role="status" aria-live="polite" hidden></div>
-      <div class="buttons"><button type="button" id="copyBtn" class="secondary" disabled><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16H3a1 1 0 0 1-1-1V4a2 2 0 0 1 2-2h11a1 1 0 0 1 1 1v1"/></svg><span data-i18n="copy">Copy links</span></button><button type="button" id="downloadBtn" class="primary" disabled><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3"/></svg><span data-i18n="download">Download selected</span></button></div>
-      <div class="fineprint"><span data-i18n="privacy">No tracking. No uploads. No accounts.</span><span class="fine-divider">✦</span><span data-i18n="legal">Use only for permitted content</span></div>
+      <div class="buttons">
+        <button type="button" id="copyBtn" class="secondary" disabled>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16H3a1 1 0 0 1-1-1V4a2 2 0 0 1 2-2h11a1 1 0 0 1 1 1v1"/></svg>
+          <span data-i18n="copy">Copy links</span>
+        </button>
+        <button type="button" id="downloadBtn" class="primary" disabled>
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-5-5 5 5 5-5M4 17v3h16v-3"/></svg>
+          <span data-i18n="download">Download selected</span>
+        </button>
+      </div>
+      <div class="fineprint">
+        <span data-i18n="privacy">No tracking. No uploads. No accounts.</span>
+        <span class="fine-divider">✦</span>
+        <span data-i18n="legal">Use only for permitted content</span>
+      </div>
     </footer>
   </div>
   <script src="asset-utils.js"></script>

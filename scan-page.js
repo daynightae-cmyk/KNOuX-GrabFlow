@@ -11,11 +11,13 @@ function scanPageAssets() {
   const blockedVideo = /(^|\.)(youtube\.com|youtube-nocookie\.com|youtu\.be)$/i.test(location.hostname);
   const extensions = {
     image: /\.(?:jpe?g|png|webp|gif|svg|avif|bmp|tiff?)(?:[?#]|$)/i,
-    video: /\.(?:mp4|webm|ogv|mov|m4v)(?:[?#]|$)/i,
-    audio: /\.(?:mp3|m4a|aac|wav|flac|ogg|oga|opus)(?:[?#]|$)/i,
+    video: /\.(?:mp4|webm|ogv|mov|m4v|mkv)(?:[?#]|$)/i,
+    audio: /\.(?:mp3|m4a|aac|wav|flac|ogg|oga|opus|weba)(?:[?#]|$)/i,
     document: /\.(?:pdf|docx?|xlsx?|pptx?|txt|csv|epub|zip|rar|7z|json|md)(?:[?#]|$)/i
   };
   const validTypes = Object.keys(extensions);
+  const audioMime = /^(?:audio\/(?:mpeg|mp4|aac|wav|flac|ogg|opus|webm))\b/i;
+
   // A playlist is a recipe for many segments, not a downloadable complete video.
   function videoFormat(value, mime = '') {
     const v = String(value || '');
@@ -26,7 +28,10 @@ function scanPageAssets() {
   }
   function classifyVideo(value, mime = '') {
     if (videoFormat(value, mime) !== 'direct') return true;
-    return extensions.video.test(String(value || '')) || /^(?:video\/(?:mp4|webm|ogg|quicktime|x-m4v))\b/i.test(String(mime || ''));
+    return extensions.video.test(String(value || '')) || /^(?:video\/(?:mp4|webm|ogg|quicktime|x-m4v|x-matroska))\b/i.test(String(mime || ''));
+  }
+  function classifyAudio(value, mime = '') {
+    return extensions.audio.test(String(value || '')) || audioMime.test(String(mime || ''));
   }
   function safeUrl(value) {
     if (typeof value !== 'string' || !value.trim()) return null;
@@ -36,13 +41,20 @@ function scanPageAssets() {
       return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password ? u.href : null;
     } catch (_) { return null; }
   }
-  function add(type, candidate, label, source = 'dom', width = 0, height = 0, mime = '') {
+  function add(type, candidate, label, source = 'dom', width = 0, height = 0, mime = '', extra = {}) {
     if (assets.length >= LIMIT || !validTypes.includes(type) || (blockedVideo && type === 'video')) return;
     const url = safeUrl(candidate);
     if (!url) return;
     if (seen.has(url)) {
       const prior = assets[seen.get(url)];
-      if (prior && !prior.width && width > 0) { prior.width = width; prior.height = height; }
+      if (prior) {
+        if (!prior.width && width > 0) { prior.width = Math.trunc(width); prior.height = Math.trunc(height); }
+        if (extra.subtitles && (!prior.subtitles || !prior.subtitles.length)) {
+          prior.subtitles = extra.subtitles;
+          prior.hasSubtitles = true;
+        }
+        if (extra.codec && !prior.codec) prior.codec = extra.codec;
+      }
       return;
     }
     let name = typeof label === 'string' ? label.replace(/\s+/g, ' ').trim() : '';
@@ -51,10 +63,27 @@ function scanPageAssets() {
       catch (_) { name = ''; }
     }
     seen.set(url, assets.length);
-    assets.push({type, url, name: (name || `${type} asset`).slice(0, 140), source,
-      ...(type === 'video' ? {format: videoFormat(url, mime)} : {}),
-      width: Number.isFinite(width) && width > 0 ? Math.trunc(width) : 0,
-      height: Number.isFinite(height) && height > 0 ? Math.trunc(height) : 0});
+    const w = Number.isFinite(width) && width > 0 ? Math.trunc(width) : 0;
+    const h = Number.isFinite(height) && height > 0 ? Math.trunc(height) : 0;
+    const item = {
+      type, url, name: (name || `${type} asset`).slice(0, 140), source,
+      width: w, height: h
+    };
+    if (type === 'video') {
+      const format = videoFormat(url, mime);
+      const isPlaylist = ['hls', 'dash'].includes(format);
+      item.format = format;
+      item.isPlaylist = isPlaylist;
+      item.conversionPath = isPlaylist ? 'companion-assembly' : 'direct-download';
+      item.downloadEligibility = isPlaylist ? 'requires-companion' : 'eligible';
+      const codecMatch = /codecs\s*=\s*["']?([^"';]+)["']?/i.exec(mime || '');
+      item.codec = codecMatch ? codecMatch[1].trim() : (extra.codec || null);
+      item.resolution = w > 0 && h > 0 ? `${w}×${h}` : (extra.resolution || null);
+      item.hasAudio = extra.hasAudio ?? null;
+      item.hasSubtitles = Boolean(extra.subtitles && extra.subtitles.length > 0);
+      if (item.hasSubtitles) item.subtitles = extra.subtitles;
+    }
+    assets.push(item);
   }
   function bestSrcset(value) {
     if (typeof value !== 'string' || !value.trim()) return '';
@@ -72,6 +101,51 @@ function scanPageAssets() {
     for (const v of values) if (safeUrl(v)) return v;
     return '';
   }
+  function parseTracks(mediaEl) {
+    const tracks = [];
+    if (!mediaEl || typeof mediaEl.querySelectorAll !== 'function') return tracks;
+    try {
+      const list = mediaEl.querySelectorAll('track') || [];
+      for (const track of list) {
+        const src = safeUrl(track.getAttribute('src'));
+        if (src) {
+          tracks.push({
+            src,
+            kind: track.getAttribute('kind') || 'subtitles',
+            srclang: track.getAttribute('srclang') || '',
+            label: (track.getAttribute('label') || '').slice(0, 50)
+          });
+        }
+      }
+    } catch (_) { /* defensive */ }
+    return tracks;
+  }
+  function scanVideoElement(video) {
+    if (!video || blockedVideo) return;
+    const w = video.videoWidth || Number(video.getAttribute('width')) || 0;
+    const h = video.videoHeight || Number(video.getAttribute('height')) || 0;
+    const tracks = parseTracks(video);
+    const mime = video.getAttribute('type') || '';
+    const src = firstHttp(video.currentSrc, video.getAttribute('src'), video.getAttribute('data-src'),
+      video.getAttribute('data-hls'), video.getAttribute('data-video-src'), video.getAttribute('data-manifest'),
+      video.getAttribute('data-stream'), video.getAttribute('data-dash'));
+    if (src) {
+      add('video', src, video.getAttribute('title') || video.getAttribute('aria-label'), 'video', w, h, mime,
+        {subtitles: tracks});
+    }
+    const sources = (typeof video.querySelectorAll === 'function') ? (video.querySelectorAll('source[src],source[data-src]') || []) : [];
+    for (const source of sources) {
+      const sSrc = firstHttp(source.getAttribute('src'), source.getAttribute('data-src'));
+      const sMime = source.getAttribute('type') || '';
+      const sW = Number(source.getAttribute('width') || source.getAttribute('res')) || w;
+      const sH = Number(source.getAttribute('height')) || h;
+      if (sSrc && classifyVideo(sSrc, sMime)) {
+        add('video', sSrc, video.getAttribute('title') || source.getAttribute('title'), 'video', sW, sH, sMime,
+          {subtitles: tracks});
+      }
+    }
+  }
+
   for (const img of document.querySelectorAll('img')) {
     const url = firstHttp(img.currentSrc,
       img.getAttribute('data-src'), img.getAttribute('data-original'),
@@ -91,24 +165,40 @@ function scanPageAssets() {
   }
   if (!blockedVideo) {
     for (const video of document.querySelectorAll('video')) {
-      const src = firstHttp(video.currentSrc, video.getAttribute('src'), video.getAttribute('data-src'),
-        video.getAttribute('data-hls'), video.getAttribute('data-video-src'));
-      if (src) add('video', src, video.getAttribute('title') || video.getAttribute('aria-label'), 'video', 0, 0,
-        video.getAttribute('type') || '');
-      for (const source of video.querySelectorAll('source[src],source[data-src]')) {
-        const src = firstHttp(source.getAttribute('src'), source.getAttribute('data-src'));
-        if (src && classifyVideo(src, source.getAttribute('type'))) add('video', src,
-          video.getAttribute('title'), 'video', 0, 0, source.getAttribute('type'));
-      }
+      scanVideoElement(video);
+      if (assets.length >= LIMIT) break;
     }
+    // Modern dynamic web component players (Video.js, Plyr, media-player, shadow DOM)
+    let playersChecked = 0;
+    try {
+      const dynamicList = document.querySelectorAll('video-js, plyr, media-player, video-player, [data-player]') || [];
+      for (const container of dynamicList) {
+        if (++playersChecked > 50 || assets.length >= LIMIT) break;
+        if (container.shadowRoot && typeof container.shadowRoot.querySelectorAll === 'function') {
+          for (const shadowVideo of container.shadowRoot.querySelectorAll('video')) {
+            scanVideoElement(shadowVideo);
+          }
+        }
+        const directDataSrc = firstHttp(container.getAttribute('data-src'), container.getAttribute('data-video-src'),
+          container.getAttribute('data-hls'), container.getAttribute('data-stream'), container.getAttribute('data-manifest'));
+        if (directDataSrc && classifyVideo(directDataSrc)) {
+          add('video', directDataSrc, container.getAttribute('title') || container.getAttribute('aria-label'), 'dynamic-player');
+        }
+      }
+    } catch (_) { /* ignore if not queryable */ }
   }
   for (const audio of document.querySelectorAll('audio')) {
     add('audio', firstHttp(audio.currentSrc, audio.getAttribute('src'), audio.getAttribute('data-src')),
       audio.getAttribute('title') || audio.getAttribute('aria-label'), 'audio');
-    for (const source of audio.querySelectorAll('source[src],source[data-src]')) {
-      add('audio', firstHttp(source.getAttribute('src'), source.getAttribute('data-src')),
-        audio.getAttribute('title'), 'audio');
+    const sources = (typeof audio.querySelectorAll === 'function') ? (audio.querySelectorAll('source[src],source[data-src]') || []) : [];
+    for (const source of sources) {
+      const sSrc = firstHttp(source.getAttribute('src'), source.getAttribute('data-src'));
+      const sMime = source.getAttribute('type') || '';
+      if (sSrc && classifyAudio(sSrc, sMime)) {
+        add('audio', sSrc, audio.getAttribute('title'), 'audio');
+      }
     }
+    if (assets.length >= LIMIT) break;
   }
   // Only direct media formats from OpenGraph; no playlist, page player or DRM.
   for (const meta of document.querySelectorAll('meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"],meta[property="og:video"],meta[property="og:video:url"],meta[property="og:video:secure_url"],meta[property="og:audio"],meta[property="og:audio:secure_url"]')) {
@@ -116,6 +206,7 @@ function scanPageAssets() {
     const value = meta.getAttribute('content');
     const type = tag.includes('image') ? 'image' : tag.includes('audio') ? 'audio' : 'video';
     if (value && (type === 'video' ? classifyVideo(value) : extensions[type].test(value))) add(type, value, '', 'meta');
+    if (assets.length >= LIMIT) break;
   }
   // Deliberately bounded scan of *inline* CSS. Never fetch stylesheets.
   let sampled = 0;
@@ -130,7 +221,7 @@ function scanPageAssets() {
     if (!url) continue;
     const name = link.getAttribute('download') || link.getAttribute('aria-label') || link.textContent;
     for (const type of validTypes) {
-      if (type === 'video' ? classifyVideo(url, link.getAttribute('type')) : extensions[type].test(url)) {
+      if (type === 'video' ? classifyVideo(url, link.getAttribute('type')) : (type === 'audio' ? classifyAudio(url, link.getAttribute('type')) : extensions[type].test(url))) {
         add(type, url, name, 'link', 0, 0, link.getAttribute('type')); break;
       }
     }
@@ -159,7 +250,9 @@ function scanPageAssets() {
         const content = value.contentUrl;
         const mime = value.encodingFormat || '';
         if (typeof content === 'string' && classifyVideo(content, mime)) {
-          add('video', content, value.name || '', 'structured-data', 0, 0, mime);
+          const w = Number(value.width) || 0;
+          const h = Number(value.height) || 0;
+          add('video', content, value.name || '', 'structured-data', w, h, mime);
         }
       }
       for (const k of ['@graph', 'mainEntity', 'video', 'itemListElement']) if (value[k]) visit(value[k], depth + 1);

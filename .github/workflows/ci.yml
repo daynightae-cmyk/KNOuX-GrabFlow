@@ -23,6 +23,8 @@ jobs:
         run: node tests/test-scanner.cjs
       - name: Utility and export tests
         run: node tests/test-utilities.cjs
+      - name: Native companion host contract tests
+        run: python3 tests/test-companion-host.py
       - name: FFmpeg companion safety tests
         run: python3 tests/test-companion.py
       - name: Ensure FFmpeg for HLS integration
@@ -40,7 +42,8 @@ jobs:
           name: KNOuX-GrabFlow-chrome
           path: artifacts/*.zip
           if-no-files-found: error
-  popup-browser-smoke:
+
+  browser-e2e-and-matrix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,5 +54,9 @@ jobs:
         run: |
           python -m pip install 'playwright==1.55.0'
           python -m playwright install --with-deps chromium
-      - name: Popup browser UI integration (mock Chrome APIs)
+      - name: Popup browser UI in-memory smoke
         run: python tests/test-ui-inmemory.py
+      - name: Popup browser UI smoke (HTTP server)
+        run: python tests/test-ui.py
+      - name: 18-Fixture Real Browser Matrix E2E Test Suite
+        run: python tests/test-e2e-matrix.py

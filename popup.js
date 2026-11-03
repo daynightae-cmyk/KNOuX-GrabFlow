@@ -1,9 +1,11 @@
 'use strict';
 
 const ui = Object.fromEntries([
-  'langBtn','refreshBtn','totalCount','pageHost','search','results','selectedLabel',
-  'selectVisible','clearSelection','copyBtn','downloadBtn','notice','countAll',
-  'countImage','countVideo','countAudio','countDocument','sortMode','largeImages','csvBtn','downloadStatus'
+  'langBtn', 'refreshBtn', 'totalCount', 'pageHost', 'search', 'results', 'selectedLabel',
+  'selectVisible', 'clearSelection', 'copyBtn', 'downloadBtn', 'notice', 'countAll',
+  'countImage', 'countVideo', 'countAudio', 'countDocument', 'sortMode', 'largeImages', 'csvBtn',
+  'downloadStatus', 'managerToggleBtn', 'scannerView', 'managerView', 'managerList',
+  'managerCount', 'clearHistoryBtn', 'companionStatus'
 ].map(id => [id, document.getElementById(id)]));
 
 const dictionary = {
@@ -23,10 +25,16 @@ const dictionary = {
     typeImage: 'IMAGE', typeVideo: 'VIDEO', typeAudio: 'AUDIO', typeDocument: 'FILE',
     sortBy: 'Sort', pageOrder: 'Page order', sortName: 'Name A–Z', sortType: 'File type',
     largeOnly: 'Large images', exportCsv: 'CSV', csvCopied: 'CSV copied for the visible results.',
-    streamHint: 'Stream playlist — needs a converter to produce one playable video.',
-    streamNotDirect: 'HLS/DASH playlists cannot be saved as complete videos with Chrome Downloads. Copy the links for an authorized converter.',
-    streamSkipped: n => `${n} streaming playlists skipped (copy their links for a converter).`,
-    downloadProgress: (c,r,f) => `Downloaded: ${c} complete · ${r} running · ${f} failed`,
+    streamHint: 'Stream playlist — needs companion to produce one playable video.',
+    streamNotDirect: 'HLS/DASH playlists cannot be saved as complete videos with Chrome Downloads alone. Use the KNOuX Native Companion or copy links.',
+    streamSkipped: n => `${n} streaming playlists skipped (copy links or assemble via Companion).`,
+    downloadProgress: (c, r, f) => `Downloads: ${c} complete · ${r} running · ${f} failed`,
+    downloadManagerTitle: 'Download Manager', clearHistory: 'Clear History',
+    noDownloads: 'No active or recent downloads.', openFile: 'Open', showFolder: 'Folder',
+    retry: 'Retry', cancel: 'Cancel', stateComplete: 'Complete', stateInProgress: 'Downloading',
+    stateInterrupted: 'Interrupted', stateFailed: 'Failed', companionConnected: 'COMPANION: CONNECTED',
+    companionChecking: 'COMPANION: CHECKING', companionMissing: 'COMPANION: NOT INSTALLED',
+    subtitlesLabel: n => `${n} SUBTITLES`
   },
   ar: {
     heroNote: 'محلي • خصوصية • عند الطلب', detected: 'ملف قابل للاكتشاف في الصفحة',
@@ -44,37 +52,78 @@ const dictionary = {
     typeImage: 'صورة', typeVideo: 'فيديو', typeAudio: 'صوت', typeDocument: 'ملف',
     sortBy: 'الترتيب', pageOrder: 'ترتيب الصفحة', sortName: 'بالاسم', sortType: 'نوع الملف',
     largeOnly: 'الصور الكبيرة', exportCsv: 'CSV', csvCopied: 'تم نسخ CSV للنتائج الظاهرة.',
-    streamHint: 'قائمة بث تحتاج تجميعًا لإنتاج فيديو واحد قابل للتشغيل.',
-    streamNotDirect: 'قوائم HLS/DASH ليست ملفات فيديو كاملة. انسخ الرابط واستخدم محوّلًا مصرحًا به.',
-    streamSkipped: n => `تم تجاوز ${n} قائمة بث؛ يمكن نسخ روابطها للمحوّل.`,
-    downloadProgress: (c,r,f) => `التنزيل: ${c} مكتمل · ${r} جارٍ · ${f} فشل`,
+    streamHint: 'قائمة بث تحتاج المساعد المحلي لإنتاج فيديو كامل.',
+    streamNotDirect: 'قوائم HLS/DASH ليست ملفات فيديو مباشرة. استخدم المساعد المحلي أو انسخ الروابط.',
+    streamSkipped: n => `تم تجاوز ${n} قائمة بث؛ استخدم المساعد المحلي لتجميعها.`,
+    downloadProgress: (c, r, f) => `التنزيل: ${c} مكتمل · ${r} جارٍ · ${f} فشل`,
+    downloadManagerTitle: 'إدارة التحميلات', clearHistory: 'مسح السجل',
+    noDownloads: 'لا توجد تنزيلات نشطة أو سابقة.', openFile: 'فتح', showFolder: 'المجلد',
+    retry: 'إعادة', cancel: 'إلغاء', stateComplete: 'مكتمل', stateInProgress: 'جارٍ التحميل',
+    stateInterrupted: 'متوقف', stateFailed: 'فشل', companionConnected: 'المساعد: متصل',
+    companionChecking: 'المساعد: جارٍ التحقق', companionMissing: 'المساعد: غير مثبت',
+    subtitlesLabel: n => `${n} ترجمة`
   }
 };
 
-const state = {lang: 'en', assets: [], selected: new Set(), filter: 'all', busy: false, tab: null, page: null};
+const state = {
+  lang: 'en',
+  assets: [],
+  selected: new Set(),
+  filter: 'all',
+  busy: false,
+  tab: null,
+  page: null,
+  view: 'scanner', // 'scanner' | 'manager'
+  companion: { connected: false, version: null },
+  activeDownloads: new Map()
+};
+
 const t = (key, ...args) => {
   const value = dictionary[state.lang][key] || key;
   return typeof value === 'function' ? value(...args) : value;
 };
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+}
+
 function translate() {
   document.documentElement.lang = state.lang;
   document.documentElement.dir = state.lang === 'ar' ? 'rtl' : 'ltr';
   ui.langBtn.textContent = state.lang === 'ar' ? 'English' : 'عربي';
-  document.querySelectorAll('[data-i18n]').forEach(node => { node.textContent = t(node.dataset.i18n); });
+  document.querySelectorAll('[data-i18n]').forEach(node => {
+    node.textContent = t(node.dataset.i18n);
+  });
   ui.search.placeholder = t('search');
   ui.selectedLabel.textContent = t('selected', state.selected.size);
+  if (ui.companionStatus) {
+    ui.companionStatus.textContent = state.companion.connected
+      ? t('companionConnected') : t('companionMissing');
+  }
   if (state.page) render();
+  renderDownloads();
   if (!ui.downloadStatus.hidden) restoreDownloadStatus();
 }
+
 function notice(message, error = false) {
   ui.notice.hidden = !message;
   ui.notice.classList.toggle('error', error);
   ui.notice.textContent = message || '';
 }
+
 function visibleAssets() {
   const query = ui.search.value.toLocaleLowerCase().trim();
-  return filterSortAssets(state.assets, {type: state.filter, query, sort: ui.sortMode.value, largeImages: ui.largeImages.checked});
+  return filterSortAssets(state.assets, {
+    type: state.filter,
+    query,
+    sort: ui.sortMode.value,
+    largeImages: ui.largeImages.checked
+  });
 }
+
 function setBusy(busy) {
   state.busy = busy;
   ui.refreshBtn.disabled = busy;
@@ -82,6 +131,7 @@ function setBusy(busy) {
   ui.clearSelection.disabled = busy;
   renderButtons();
 }
+
 function renderButtons() {
   const hasSelection = state.selected.size > 0;
   const hasDownloadable = selectedAssets().some(isDownloadableAsset);
@@ -89,6 +139,7 @@ function renderButtons() {
   ui.downloadBtn.disabled = state.busy || !hasDownloadable;
   ui.selectedLabel.textContent = t('selected', state.selected.size);
 }
+
 function empty(message) {
   ui.results.replaceChildren();
   const block = document.createElement('div');
@@ -101,6 +152,7 @@ function empty(message) {
   block.append(emblem, content);
   ui.results.append(block);
 }
+
 function render() {
   const counts = {all: state.assets.length, image: 0, video: 0, document: 0, audio: 0};
   for (const asset of state.assets) counts[asset.type]++;
@@ -110,16 +162,19 @@ function render() {
   ui.countDocument.textContent = counts.document;
   ui.countAudio.textContent = counts.audio;
   ui.totalCount.textContent = String(counts.all).padStart(2, '0');
+
   const shown = visibleAssets();
   renderButtons();
   if (!state.assets.length) { empty(t('noAssets')); return; }
   if (!shown.length) { empty(t('noMatch')); return; }
+
   const fragment = document.createDocumentFragment();
   for (const asset of shown) {
     const row = document.createElement('label');
     row.className = 'asset';
     row.classList.toggle('selected', state.selected.has(asset.url));
     row.classList.toggle('stream', asset.type === 'video' && !isDownloadableAsset(asset));
+
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = state.selected.has(asset.url);
@@ -131,41 +186,73 @@ function render() {
       row.classList.toggle('selected', checkbox.checked);
       renderButtons();
     });
+
     const icon = document.createElement('span');
     icon.className = 'asset-icon';
-    icon.textContent = {image: '▧', video: '▷', document: '▤', audio: '♫'}[asset.type];
+    icon.textContent = {image: '▧', video: '▷', document: '▤', audio: '♫'}[asset.type] || '✦';
+
     const info = document.createElement('span');
     info.className = 'asset-info';
+
     const name = document.createElement('div');
     name.className = 'asset-name';
     name.textContent = asset.name;
     name.title = asset.name;
+
     const url = document.createElement('div');
     url.className = 'asset-url';
     url.textContent = asset.url;
     url.title = asset.url;
+
     info.append(name, url);
+
+    const badges = document.createElement('div');
+    badges.className = 'asset-badges';
+
     if (asset.type === 'video') {
-      const format = document.createElement('div');
+      const format = document.createElement('span');
       format.className = 'asset-format';
-      format.textContent = (asset.format === 'hls' ? 'HLS · M3U8' : asset.format === 'dash' ? 'DASH · MPD' : 'VIDEO FILE');
+      format.textContent = asset.format === 'hls' ? 'HLS · M3U8'
+        : (asset.format === 'dash' ? 'DASH · MPD' : (asset.format ? asset.format.toUpperCase() : 'VIDEO FILE'));
       if (!isDownloadableAsset(asset)) format.title = t('streamHint');
-      info.append(format);
-    }
-    if (asset.type === 'image' && asset.width && asset.height) {
-      const dimensions = document.createElement('div');
+      badges.append(format);
+
+      if (asset.resolution) {
+        const res = document.createElement('span');
+        res.className = 'asset-format';
+        res.textContent = asset.resolution;
+        badges.append(res);
+      }
+      if (asset.codec) {
+        const c = document.createElement('span');
+        c.className = 'asset-format';
+        c.textContent = asset.codec.slice(0, 16);
+        badges.append(c);
+      }
+      if (asset.hasSubtitles && asset.subtitles?.length) {
+        const sub = document.createElement('span');
+        sub.className = 'asset-subtag';
+        sub.textContent = t('subtitlesLabel', asset.subtitles.length);
+        badges.append(sub);
+      }
+    } else if (asset.type === 'image' && asset.width && asset.height) {
+      const dimensions = document.createElement('span');
       dimensions.className = 'asset-meta';
       dimensions.textContent = `${asset.width} × ${asset.height} px`;
-      info.append(dimensions);
+      badges.append(dimensions);
     }
+    if (badges.childNodes.length > 0) info.append(badges);
+
     const badge = document.createElement('span');
     badge.className = 'asset-type';
     badge.textContent = t(`type${asset.type[0].toUpperCase()}${asset.type.slice(1)}`);
+
     row.append(checkbox, icon, info, badge);
     fragment.append(row);
   }
   ui.results.replaceChildren(fragment);
 }
+
 function applyScannedPage(result) {
   if (!result || !Array.isArray(result.assets)) throw new Error('Invalid scan result');
   state.page = result;
@@ -176,6 +263,7 @@ function applyScannedPage(result) {
   render();
   if (result.truncated) notice(state.lang === 'ar' ? 'تم عرض أول 600 نتيجة.' : 'Showing the first 600 results.');
 }
+
 async function scan() {
   setBusy(true);
   notice('');
@@ -208,7 +296,9 @@ async function scan() {
     setBusy(false);
   }
 }
+
 function selectedAssets() { return state.assets.filter(asset => state.selected.has(asset.url)); }
+
 async function downloadSelected() {
   const allSelected = selectedAssets();
   const chosen = allSelected.filter(isDownloadableAsset);
@@ -224,15 +314,29 @@ async function downloadSelected() {
       const asset = chosen[index];
       notice(t('downloading', index + 1, chosen.length));
       try {
+        const filename = safeDownloadName(asset, index + 1, state.page?.domain);
         const id = await chrome.downloads.download({
-          url: asset.url, filename: safeDownloadName(asset, index + 1, state.page?.domain), conflictAction: 'uniquify', saveAs: false
+          url: asset.url, filename, conflictAction: 'uniquify', saveAs: false
         });
-        if (typeof id === 'number') { success++; ids.push(id); } else failures++;
+        if (typeof id === 'number') {
+          success++;
+          ids.push(id);
+          recordDownloadJob(id, {
+            id, url: asset.url, filename, domain: state.page?.domain,
+            format: asset.format || asset.type, state: 'in_progress', bytesReceived: 0, totalBytes: 0
+          });
+        } else {
+          failures++;
+        }
       } catch (_) { failures++; }
     }
-    // Persist IDs only: reopening the popup reconciles Chrome's real download states.
     if (ids.length) {
-      try { await chrome.storage.local.set({downloadRuns: ids.slice(-30)}); } catch (_) { /* optional */ }
+      try {
+        const stored = await chrome.storage.local.get(['downloadRuns']);
+        const prior = Array.isArray(stored.downloadRuns) ? stored.downloadRuns : [];
+        const merged = Array.from(new Set([...prior, ...ids])).slice(-50);
+        await chrome.storage.local.set({downloadRuns: merged});
+      } catch (_) { /* optional */ }
     }
     const suffix = skipped ? ` · ${t('streamSkipped', skipped)}` : '';
     notice(t('done', success, failures) + suffix, failures > 0 || skipped > 0);
@@ -240,57 +344,250 @@ async function downloadSelected() {
   } finally { setBusy(false); }
 }
 
+function recordDownloadJob(id, details) {
+  state.activeDownloads.set(id, { ...(state.activeDownloads.get(id) || {}), ...details });
+  renderDownloads();
+}
+
+/* Download Manager rendering */
+function renderDownloads() {
+  if (!ui.managerList) return;
+  const items = Array.from(state.activeDownloads.values());
+  ui.managerCount.textContent = items.length;
+  if (!items.length) {
+    ui.managerList.innerHTML = `<div class="empty-downloads"><div class="empty-orbit">▽</div><div>${t('noDownloads')}</div></div>`;
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  // Most recent first
+  for (const item of [...items].reverse()) {
+    const card = document.createElement('div');
+    card.className = 'dl-card';
+
+    const top = document.createElement('div');
+    top.className = 'dl-card-top';
+
+    const name = document.createElement('div');
+    name.className = 'dl-card-name';
+    name.textContent = item.filename ? item.filename.split('/').pop() : (item.url ? item.url.split('/').pop() : 'Download');
+    name.title = item.url;
+
+    const badge = document.createElement('span');
+    const st = item.state || 'in_progress';
+    badge.className = `dl-state-badge ${st}`;
+    badge.textContent = st === 'complete' ? t('stateComplete')
+      : (st === 'interrupted' ? t('stateInterrupted') : t('stateInProgress'));
+
+    top.append(name, badge);
+    card.append(top);
+
+    const progress = document.createElement('div');
+    progress.className = 'dl-card-progress';
+    const bar = document.createElement('div');
+    bar.className = 'dl-card-progress-bar';
+    const pct = item.totalBytes > 0 ? Math.min(100, Math.round((item.bytesReceived / item.totalBytes) * 100))
+      : (st === 'complete' ? 100 : 30);
+    bar.style.width = `${pct}%`;
+    progress.append(bar);
+    card.append(progress);
+
+    const meta = document.createElement('div');
+    meta.className = 'dl-card-meta';
+
+    const sizeInfo = document.createElement('span');
+    if (st === 'complete') {
+      sizeInfo.textContent = formatBytes(item.fileSize || item.bytesReceived);
+    } else if (item.totalBytes > 0) {
+      sizeInfo.textContent = `${formatBytes(item.bytesReceived)} / ${formatBytes(item.totalBytes)} (${pct}%)`;
+    } else if (item.bytesReceived > 0) {
+      sizeInfo.textContent = formatBytes(item.bytesReceived);
+    } else {
+      sizeInfo.textContent = item.domain || '';
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'dl-actions';
+
+    if (st === 'complete') {
+      const openBtn = document.createElement('button');
+      openBtn.type = 'button';
+      openBtn.className = 'dl-action-btn';
+      openBtn.textContent = t('openFile');
+      openBtn.addEventListener('click', () => {
+        if (chrome.downloads?.open) chrome.downloads.open(item.id);
+      });
+      const showBtn = document.createElement('button');
+      showBtn.type = 'button';
+      showBtn.className = 'dl-action-btn';
+      showBtn.textContent = t('showFolder');
+      showBtn.addEventListener('click', () => {
+        if (chrome.downloads?.show) chrome.downloads.show(item.id);
+      });
+      actions.append(openBtn, showBtn);
+    } else if (st === 'interrupted') {
+      const retryBtn = document.createElement('button');
+      retryBtn.type = 'button';
+      retryBtn.className = 'dl-action-btn';
+      retryBtn.textContent = t('retry');
+      retryBtn.addEventListener('click', () => {
+        chrome.downloads.download({url: item.url, filename: item.filename, conflictAction: 'uniquify'});
+      });
+      actions.append(retryBtn);
+    } else if (st === 'in_progress') {
+      const cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'dl-action-btn';
+      cancelBtn.textContent = t('cancel');
+      cancelBtn.addEventListener('click', () => {
+        if (chrome.downloads?.cancel) chrome.downloads.cancel(item.id);
+      });
+      actions.append(cancelBtn);
+    }
+
+    meta.append(sizeInfo, actions);
+    card.append(meta);
+    frag.append(card);
+  }
+  ui.managerList.replaceChildren(frag);
+}
+
 async function refreshDownloadStatus(ids) {
   if (!Array.isArray(ids) || !ids.length || !chrome.downloads?.search) return;
   const items = await Promise.all(ids.map(id => chrome.downloads.search({id}).then(x => x?.[0] || null).catch(() => null)));
+  for (const item of items) {
+    if (item && item.id) {
+      state.activeDownloads.set(item.id, {
+        id: item.id,
+        url: item.url,
+        filename: item.filename,
+        state: item.state,
+        bytesReceived: item.bytesReceived,
+        totalBytes: item.totalBytes,
+        fileSize: item.fileSize,
+        error: item.error
+      });
+    }
+  }
   const totals = summarizeDownloads(items);
   ui.downloadStatus.hidden = false;
   ui.downloadStatus.textContent = t('downloadProgress', totals.complete, totals.running, totals.interrupted + totals.missing);
+  renderDownloads();
 }
+
 async function restoreDownloadStatus() {
   try {
     const data = await chrome.storage.local.get(['downloadRuns']);
-    await refreshDownloadStatus(data.downloadRuns);
-  } catch (_) { /* download history is optional, never blocks the page scan */ }
+    if (Array.isArray(data.downloadRuns)) {
+      await refreshDownloadStatus(data.downloadRuns);
+    }
+  } catch (_) { /* download history optional */ }
 }
+
+async function checkNativeCompanion() {
+  if (!chrome.runtime?.sendNativeMessage) {
+    state.companion.connected = false;
+    if (ui.companionStatus) ui.companionStatus.textContent = t('companionMissing');
+    return;
+  }
+  try {
+    chrome.runtime.sendNativeMessage('com.knoux.grabflow.companion', {action: 'ping'}, resp => {
+      if (chrome.runtime.lastError || !resp || resp.action !== 'pong') {
+        state.companion.connected = false;
+        if (ui.companionStatus) {
+          ui.companionStatus.classList.remove('connected');
+          ui.companionStatus.textContent = t('companionMissing');
+        }
+      } else {
+        state.companion.connected = true;
+        state.companion.version = resp.version;
+        if (ui.companionStatus) {
+          ui.companionStatus.classList.add('connected');
+          ui.companionStatus.textContent = t('companionConnected');
+        }
+      }
+    });
+  } catch (_) {
+    state.companion.connected = false;
+    if (ui.companionStatus) ui.companionStatus.textContent = t('companionMissing');
+  }
+}
+
 if (chrome.downloads?.onChanged?.addListener) {
-  chrome.downloads.onChanged.addListener(() => {
+  chrome.downloads.onChanged.addListener(delta => {
+    if (state.activeDownloads.has(delta.id)) {
+      const cur = state.activeDownloads.get(delta.id);
+      if (delta.state) cur.state = delta.state.current;
+      if (delta.error) cur.error = delta.error.current;
+      renderDownloads();
+    }
     chrome.storage.local.get(['downloadRuns']).then(data => refreshDownloadStatus(data.downloadRuns)).catch(() => {});
   });
 }
+
+// Event Listeners
+ui.managerToggleBtn?.addEventListener('click', () => {
+  state.view = state.view === 'scanner' ? 'manager' : 'scanner';
+  ui.scannerView.hidden = state.view === 'manager';
+  ui.managerView.hidden = state.view !== 'manager';
+  ui.managerToggleBtn.classList.toggle('active', state.view === 'manager');
+  if (state.view === 'manager') renderDownloads();
+});
+
+ui.clearHistoryBtn?.addEventListener('click', async () => {
+  state.activeDownloads.clear();
+  try { await chrome.storage.local.set({downloadRuns: []}); } catch (_) {}
+  ui.downloadStatus.hidden = true;
+  renderDownloads();
+});
+
 ui.langBtn.addEventListener('click', async () => {
   state.lang = state.lang === 'en' ? 'ar' : 'en';
   translate();
   try { await chrome.storage.local.set({language: state.lang}); } catch (_) { /* optional */ }
 });
+
 ui.refreshBtn.addEventListener('click', scan);
 ui.search.addEventListener('input', render);
 ui.sortMode.addEventListener('change', render);
 ui.largeImages.addEventListener('change', render);
+
 ui.csvBtn.addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(exportAssetsCsv(visibleAssets())); notice(t('csvCopied')); }
-  catch (_) { notice(t('copyFail'), true); }
+  try {
+    await navigator.clipboard.writeText(exportAssetsCsv(visibleAssets()));
+    notice(t('csvCopied'));
+  } catch (_) { notice(t('copyFail'), true); }
 });
+
 document.querySelectorAll('[data-filter]').forEach(tab => tab.addEventListener('click', () => {
   state.filter = tab.dataset.filter;
   document.querySelectorAll('[data-filter]').forEach(t => {
-    t.classList.toggle('active', t.dataset.filter === state.filter);
-    t.setAttribute('aria-pressed', String(t.dataset.filter === state.filter));
+    const isAct = t.dataset.filter === state.filter;
+    t.classList.toggle('active', isAct);
+    t.setAttribute('aria-pressed', String(isAct));
+    t.setAttribute('aria-selected', String(isAct));
   });
   render();
 }));
+
 ui.selectVisible.addEventListener('click', () => {
   for (const asset of visibleAssets()) state.selected.add(asset.url);
   render();
 });
-ui.clearSelection.addEventListener('click', () => { state.selected.clear(); render(); });
+
+ui.clearSelection.addEventListener('click', () => {
+  state.selected.clear();
+  render();
+});
+
 ui.copyBtn.addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(selectedAssets().map(asset => asset.url).join('\n'));
     notice(t('copied'));
   } catch (_) { notice(t('copyFail'), true); }
 });
+
 ui.downloadBtn.addEventListener('click', downloadSelected);
+
 (async () => {
   try {
     const settings = await chrome.storage.local.get(['language']);
@@ -298,5 +595,5 @@ ui.downloadBtn.addEventListener('click', downloadSelected);
       ? settings.language : (navigator.language.toLowerCase().startsWith('ar') ? 'ar' : 'en');
   } catch (_) { state.lang = 'en'; }
   translate();
-  await Promise.all([scan(), restoreDownloadStatus()]);
+  await Promise.all([scan(), restoreDownloadStatus(), checkNativeCompanion()]);
 })();

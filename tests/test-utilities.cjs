@@ -1,28 +1,42 @@
 'use strict';
 const assert = require('node:assert/strict');
-const { filterSortAssets, safeDownloadName, exportAssetsCsv, isDownloadableAsset, classifyMediaAsset, summarizeDownloads } = require('../asset-utils');
+const {
+  filterSortAssets, safeDownloadName, exportAssetsCsv, exportAssetsJson,
+  isDownloadableAsset, classifyMediaAsset, summarizeDownloads,
+  generateFfmpegCommand, generateCurlCommand, formatDuration
+} = require('../asset-utils');
+
 let tests = 0;
-function test(name, fn) { fn(); console.log('PASS',name); tests++; }
+function test(name, fn) { fn(); console.log('PASS', name); tests++; }
+
 const data = [
   {type:'image', name:'zebra', url:'https://x.test/a.webp', width:1200, height:600},
   {type:'image', name:'alpha', url:'https://x.test/b.jpg', width:200, height:100},
   {type:'document', name:'Readme', url:'https://x.test/file.pdf'},
-  {type:'video', name:'Showreel', url:'https://x.test/video.mp4'},
+  {type:'video', name:'Showreel', url:'https://x.test/video.mp4', format:'direct'},
+  {type:'video', name:'Live Broadcast', url:'https://x.test/live.m3u8', format:'hls'},
   {type:'audio', name:'Soundtrack', url:'https://x.test/audio.mp3'}
 ];
+
 test('sort name without mutating input', () => {
  const original = [...data];
- const sorted = filterSortAssets(data,{sort:'name'});
- assert.deepEqual(sorted.map(x=>x.name),['alpha','Readme','Showreel','Soundtrack','zebra']);
- assert.deepEqual(data,original);
+ const sorted = filterSortAssets(data, {sort:'name'});
+ assert.deepEqual(sorted.map(x=>x.name), ['alpha','Live Broadcast','Readme','Showreel','Soundtrack','zebra']);
+ assert.deepEqual(data, original);
 });
 test('large images filter keeps nonimage items', () => {
- const out = filterSortAssets(data,{largeImages:true});
- assert.deepEqual(out.map(x=>x.name),['zebra','Readme','Showreel','Soundtrack']);
+ const out = filterSortAssets(data, {largeImages:true});
+ assert.deepEqual(out.map(x=>x.name), ['zebra','Readme','Showreel','Live Broadcast','Soundtrack']);
 });
 test('filter and search compose', () => {
- const out = filterSortAssets(data,{type:'image',query:'WEBP'});
- assert.equal(out.length,1); assert.equal(out[0].name,'zebra');
+ const out = filterSortAssets(data, {type:'image', query:'WEBP'});
+ assert.equal(out.length, 1); assert.equal(out[0].name, 'zebra');
+});
+test('stream filter isolates HLS/DASH streaming manifests', () => {
+ const streams = filterSortAssets(data, {type:'stream'});
+ assert.equal(streams.length, 1);
+ assert.equal(streams[0].name, 'Live Broadcast');
+ assert.equal(streams[0].format, 'hls');
 });
 test('safe file names protect Windows device names and path traversal', () => {
  assert.equal(safeDownloadName({type:'document',url:'https://x.test/%2E%2E%2FCON.pdf'},1,'x.test'), 'KNOuX-GrabFlow/x.test/_CON.pdf');
@@ -34,36 +48,34 @@ test('direct audio links preserve their extension in downloads', () => {
 });
 test('CSV quotes potentially dangerous names as text', () => {
  const csv = exportAssetsCsv([{type:'image',name:'A, "B"',url:'https://site/a.png',width:1,height:2,source:'image'}]);
- assert.match(csv,/"A, ""B"""/);
- assert.equal(csv.split('\r\n').length,2);
+ assert.match(csv, /"A, ""B"""/);
+ assert.equal(csv.split('\r\n').length, 2);
  const hostile=exportAssetsCsv([{type:'image',name:'=HYPERLINK(\"evil\")',url:'https://x.test'}]);
  assert.ok(hostile.includes(String.raw`"'=HYPERLINK`));
 });
 test('manifest imposes least privilege, no remote code or background scanner', () => {
  const m = require('../manifest.json');
- assert.equal(m.manifest_version,3);
- assert.deepEqual(m.permissions,['activeTab','scripting','downloads','storage','nativeMessaging']);
- assert.equal(m.host_permissions,undefined);
- assert.equal(m.background,undefined);
+ assert.equal(m.manifest_version, 3);
+ assert.deepEqual(m.permissions, ['activeTab','scripting','downloads','storage','nativeMessaging']);
+ assert.equal(m.host_permissions, undefined);
+ assert.equal(m.background, undefined);
  assert.ok(!JSON.stringify(m).includes('unsafe-eval'));
 });
 test('stream playlists are copy-only, direct video files are downloadable', () => {
- assert.equal(isDownloadableAsset({type:'video',format:'hls'}),false);
- assert.equal(isDownloadableAsset({type:'video',format:'dash'}),false);
- assert.equal(isDownloadableAsset({type:'video',format:'direct'}),true);
- assert.equal(isDownloadableAsset({type:'document'}),true);
+ assert.equal(isDownloadableAsset({type:'video',format:'hls'}), false);
+ assert.equal(isDownloadableAsset({type:'video',format:'dash'}), false);
+ assert.equal(isDownloadableAsset({type:'video',format:'direct'}), true);
+ assert.equal(isDownloadableAsset({type:'document'}), true);
 });
 test('real download states are reconciled separately from download starts', () => {
  assert.deepEqual(summarizeDownloads([{state:'complete'},{state:'in_progress'},{state:'interrupted'},null]),
-  {complete:1,running:1,interrupted:1,missing:1});
+  {complete:1, running:1, interrupted:1, missing:1});
 });
 test('CSV exports media format for programmatic stream conversion', () => {
- const csv=exportAssetsCsv([{type:'video',name:'Stream',url:'https://cdn.test/master.m3u8',format:'hls'}]);
+ const csv = exportAssetsCsv([{type:'video',name:'Stream',url:'https://cdn.test/master.m3u8',format:'hls'}]);
  assert.ok(csv.includes('format'));
  assert.ok(csv.includes('"hls"'));
 });
-
-// New tests:
 test('safeDownloadName preserves MKV and WebM extensions accurately', () => {
  assert.equal(safeDownloadName({type:'video',url:'https://cdn.test/feature.mkv'},1,'cdn.test'), 'KNOuX-GrabFlow/cdn.test/feature.mkv');
  assert.equal(safeDownloadName({type:'video',url:'https://cdn.test/clip.webm?token=xyz'},2,'cdn.test'), 'KNOuX-GrabFlow/cdn.test/clip.webm');
@@ -90,6 +102,29 @@ test('classifyMediaAsset constructs complete structured metadata', () => {
  assert.equal(classified.subtitles.length, 1);
  assert.equal(classified.downloadEligibility, 'requires-companion');
  assert.equal(classified.supportedConversionPath, 'companion-assembly');
+});
+test('generateFfmpegCommand constructs secure, properly quoted CLI arguments', () => {
+ const cmd = generateFfmpegCommand('https://cdn.test/live.m3u8', 'my_stream.mp4');
+ assert.ok(cmd.startsWith('ffmpeg -hide_banner -nostdin -i "https://cdn.test/live.m3u8" -c copy -movflags +faststart'));
+ assert.ok(cmd.endsWith('"my_stream.mp4"'));
+});
+test('generateCurlCommand generates correct direct download command', () => {
+ const cmd = generateCurlCommand('https://cdn.test/archive.zip', 'archive.zip');
+ assert.equal(cmd, 'curl -L -o "archive.zip" "https://cdn.test/archive.zip"');
+});
+test('formatDuration formats seconds into clean mm:ss or hh:mm:ss strings', () => {
+ assert.equal(formatDuration(45), '0:45');
+ assert.equal(formatDuration(125), '2:05');
+ assert.equal(formatDuration(3665), '1:01:05');
+ assert.equal(formatDuration(-1), '');
+ assert.equal(formatDuration(null), '');
+});
+test('exportAssetsJson exports structured valid JSON', () => {
+ const jsonStr = exportAssetsJson([{type:'video',format:'mp4',url:'https://x.test/vid.mp4',name:'Vid'}]);
+ const parsed = JSON.parse(jsonStr);
+ assert.ok(Array.isArray(parsed));
+ assert.equal(parsed[0].mediaType, 'video');
+ assert.equal(parsed[0].format, 'mp4');
 });
 
 console.log(`${tests} utility/security checks passed`);

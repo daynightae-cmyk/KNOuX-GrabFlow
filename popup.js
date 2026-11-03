@@ -3,15 +3,17 @@
 const ui = Object.fromEntries([
   'langBtn', 'refreshBtn', 'totalCount', 'pageHost', 'search', 'results', 'selectedLabel',
   'selectVisible', 'clearSelection', 'copyBtn', 'downloadBtn', 'notice', 'countAll',
-  'countImage', 'countVideo', 'countAudio', 'countDocument', 'sortMode', 'largeImages', 'csvBtn',
-  'downloadStatus', 'managerToggleBtn', 'scannerView', 'managerView', 'managerList',
-  'managerCount', 'clearHistoryBtn', 'companionStatus'
+  'countImage', 'countVideo', 'countStream', 'countAudio', 'countDocument', 'sortMode', 'largeImages',
+  'csvBtn', 'exportJsonBtn', 'downloadStatus', 'managerToggleBtn', 'scannerView', 'managerView',
+  'managerList', 'managerCount', 'clearHistoryBtn', 'companionStatus',
+  'previewModal', 'previewBackdrop', 'previewTitle', 'previewCloseBtn', 'previewContent',
+  'previewMeta', 'previewCopyBtn', 'previewActionBtn'
 ].map(id => [id, document.getElementById(id)]));
 
 const dictionary = {
   en: {
     heroNote: 'LOCAL • PRIVATE • ON DEMAND', detected: 'Assets detected on this page',
-    all: 'All', images: 'Images', videos: 'Video', audio: 'Audio', docs: 'Files',
+    all: 'All', images: 'Images', videos: 'Video', streams: 'Streams', audio: 'Audio', docs: 'Files',
     selectVisible: 'Select visible', clear: 'Clear', copy: 'Copy links', download: 'Download selected',
     privacy: 'No tracking. No uploads. No accounts.', legal: 'Only download content you may use',
     scanning: 'Scanning page…', noAssets: 'No directly accessible assets found on this page.',
@@ -24,21 +26,29 @@ const dictionary = {
     blocked: 'Some files may be unavailable or require website permission.',
     typeImage: 'IMAGE', typeVideo: 'VIDEO', typeAudio: 'AUDIO', typeDocument: 'FILE',
     sortBy: 'Sort', pageOrder: 'Page order', sortName: 'Name A–Z', sortType: 'File type',
-    largeOnly: 'Large images', exportCsv: 'CSV', csvCopied: 'CSV copied for the visible results.',
+    largeOnly: 'Large images', exportCsv: 'CSV', exportJson: 'JSON',
+    csvCopied: 'CSV copied for visible results.', jsonCopied: 'Structured JSON copied for visible results.',
     streamHint: 'Stream playlist — needs companion to produce one playable video.',
     streamNotDirect: 'HLS/DASH playlists cannot be saved as complete videos with Chrome Downloads alone. Use the KNOuX Native Companion or copy links.',
-    streamSkipped: n => `${n} streaming playlists skipped (copy links or assemble via Companion).`,
+    streamSkipped: n => `${n} streaming playlists skipped (use Assemble button or copy links).`,
     downloadProgress: (c, r, f) => `Downloads: ${c} complete · ${r} running · ${f} failed`,
     downloadManagerTitle: 'Download Manager', clearHistory: 'Clear History',
     noDownloads: 'No active or recent downloads.', openFile: 'Open', showFolder: 'Folder',
     retry: 'Retry', cancel: 'Cancel', stateComplete: 'Complete', stateInProgress: 'Downloading',
-    stateInterrupted: 'Interrupted', stateFailed: 'Failed', companionConnected: 'COMPANION: CONNECTED',
-    companionChecking: 'COMPANION: CHECKING', companionMissing: 'COMPANION: NOT INSTALLED',
-    subtitlesLabel: n => `${n} SUBTITLES`
+    stateInterrupted: 'Interrupted', stateFailed: 'Failed',
+    companionConnected: 'COMPANION: CONNECTED', companionChecking: 'COMPANION: CHECKING', companionMissing: 'COMPANION: NOT INSTALLED',
+    subtitlesLabel: n => `${n} SUBTITLES`,
+    mediaPreview: 'Media Preview', previewBtn: 'Preview',
+    assembleWithCompanion: '⚡ Assemble', copyFfmpeg: '📋 FFmpeg',
+    ffmpegCopied: 'FFmpeg assembly command copied! Run in terminal or register companion.',
+    assemblyStarted: 'Companion stream assembly started! Tracking in Download Manager.',
+    assemblySuccess: 'Stream assembled successfully into single video file.',
+    assemblyFailed: 'Stream assembly failed.',
+    corsNotice: 'Direct preview blocked by website CORS. Direct download remains intact.'
   },
   ar: {
     heroNote: 'محلي • خصوصية • عند الطلب', detected: 'ملف قابل للاكتشاف في الصفحة',
-    all: 'الكل', images: 'الصور', videos: 'فيديو', audio: 'صوت', docs: 'ملفات',
+    all: 'الكل', images: 'الصور', videos: 'فيديو', streams: 'قوائم بث', audio: 'صوت', docs: 'ملفات',
     selectVisible: 'تحديد الظاهر', clear: 'إلغاء', copy: 'نسخ الروابط', download: 'تحميل المحدد',
     privacy: 'بدون تتبع أو رفع ملفات أو حساب.', legal: 'حمّل المحتوى المسموح لك فقط',
     scanning: 'جارٍ فحص الصفحة…', noAssets: 'لم يتم اكتشاف ملفات مباشرة قابلة للوصول.',
@@ -51,17 +61,25 @@ const dictionary = {
     blocked: 'قد تتطلب بعض الملفات صلاحيات من الموقع أو تكون غير متاحة.',
     typeImage: 'صورة', typeVideo: 'فيديو', typeAudio: 'صوت', typeDocument: 'ملف',
     sortBy: 'الترتيب', pageOrder: 'ترتيب الصفحة', sortName: 'بالاسم', sortType: 'نوع الملف',
-    largeOnly: 'الصور الكبيرة', exportCsv: 'CSV', csvCopied: 'تم نسخ CSV للنتائج الظاهرة.',
+    largeOnly: 'الصور الكبيرة', exportCsv: 'CSV', exportJson: 'JSON',
+    csvCopied: 'تم نسخ CSV للنتائج الظاهرة.', jsonCopied: 'تم نسخ بيانات JSON المهيكلة للنتائج.',
     streamHint: 'قائمة بث تحتاج المساعد المحلي لإنتاج فيديو كامل.',
-    streamNotDirect: 'قوائم HLS/DASH ليست ملفات فيديو مباشرة. استخدم المساعد المحلي أو انسخ الروابط.',
-    streamSkipped: n => `تم تجاوز ${n} قائمة بث؛ استخدم المساعد المحلي لتجميعها.`,
+    streamNotDirect: 'قوائم HLS/DASH ليست ملفات فيديو مباشرة. استخدم زر التجميع بالمساعد أو انسخ الروابط.',
+    streamSkipped: n => `تم تجاوز ${n} قائمة بث؛ استخدم زر التجميع أو انسخ الروابط.`,
     downloadProgress: (c, r, f) => `التنزيل: ${c} مكتمل · ${r} جارٍ · ${f} فشل`,
     downloadManagerTitle: 'إدارة التحميلات', clearHistory: 'مسح السجل',
     noDownloads: 'لا توجد تنزيلات نشطة أو سابقة.', openFile: 'فتح', showFolder: 'المجلد',
     retry: 'إعادة', cancel: 'إلغاء', stateComplete: 'مكتمل', stateInProgress: 'جارٍ التحميل',
-    stateInterrupted: 'متوقف', stateFailed: 'فشل', companionConnected: 'المساعد: متصل',
-    companionChecking: 'المساعد: جارٍ التحقق', companionMissing: 'المساعد: غير مثبت',
-    subtitlesLabel: n => `${n} ترجمة`
+    stateInterrupted: 'متوقف', stateFailed: 'فشل',
+    companionConnected: 'المساعد: متصل', companionChecking: 'المساعد: جارٍ التحقق', companionMissing: 'المساعد: غير مثبت',
+    subtitlesLabel: n => `${n} ترجمة`,
+    mediaPreview: 'معاينة الوسائط', previewBtn: 'معاينة',
+    assembleWithCompanion: '⚡ تجميع', copyFfmpeg: '📋 أمر FFmpeg',
+    ffmpegCopied: 'تم نسخ أمر FFmpeg! شغّله في الطرفية أو سجّل المساعد المحلي.',
+    assemblyStarted: 'بدأ تجميع البث عبر المساعد! يمكنك المتابعة في إدارة التحميلات.',
+    assemblySuccess: 'تم تجميع قائمة البث بنجاح كملف فيديو موحد.',
+    assemblyFailed: 'تعذر تجميع قائمة البث.',
+    corsNotice: 'المعاينة المباشرة محجوبة بسياسة CORS من الموقع. التنزيل يعمل بشكل طبيعي.'
   }
 };
 
@@ -75,7 +93,8 @@ const state = {
   page: null,
   view: 'scanner', // 'scanner' | 'manager'
   companion: { connected: false, version: null },
-  activeDownloads: new Map()
+  activeDownloads: new Map(),
+  previewingAsset: null
 };
 
 const t = (key, ...args) => {
@@ -154,11 +173,17 @@ function empty(message) {
 }
 
 function render() {
-  const counts = {all: state.assets.length, image: 0, video: 0, document: 0, audio: 0};
-  for (const asset of state.assets) counts[asset.type]++;
+  const counts = {all: state.assets.length, image: 0, video: 0, stream: 0, document: 0, audio: 0};
+  for (const asset of state.assets) {
+    counts[asset.type]++;
+    if (asset.type === 'video' && ['hls', 'dash'].includes(asset.format)) {
+      counts.stream++;
+    }
+  }
   ui.countAll.textContent = counts.all;
   ui.countImage.textContent = counts.image;
   ui.countVideo.textContent = counts.video;
+  if (ui.countStream) ui.countStream.textContent = counts.stream;
   ui.countDocument.textContent = counts.document;
   ui.countAudio.textContent = counts.audio;
   ui.totalCount.textContent = String(counts.all).padStart(2, '0');
@@ -170,10 +195,11 @@ function render() {
 
   const fragment = document.createDocumentFragment();
   for (const asset of shown) {
+    const isStream = asset.type === 'video' && ['hls', 'dash'].includes(asset.format);
     const row = document.createElement('label');
     row.className = 'asset';
     row.classList.toggle('selected', state.selected.has(asset.url));
-    row.classList.toggle('stream', asset.type === 'video' && !isDownloadableAsset(asset));
+    row.classList.toggle('stream', isStream);
 
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
@@ -189,7 +215,7 @@ function render() {
 
     const icon = document.createElement('span');
     icon.className = 'asset-icon';
-    icon.textContent = {image: '▧', video: '▷', document: '▤', audio: '♫'}[asset.type] || '✦';
+    icon.textContent = {image: '▧', video: isStream ? '⚡' : '▷', document: '▤', audio: '♫'}[asset.type] || '✦';
 
     const info = document.createElement('span');
     info.className = 'asset-info';
@@ -214,7 +240,7 @@ function render() {
       format.className = 'asset-format';
       format.textContent = asset.format === 'hls' ? 'HLS · M3U8'
         : (asset.format === 'dash' ? 'DASH · MPD' : (asset.format ? asset.format.toUpperCase() : 'VIDEO FILE'));
-      if (!isDownloadableAsset(asset)) format.title = t('streamHint');
+      if (isStream) format.title = t('streamHint');
       badges.append(format);
 
       if (asset.resolution) {
@@ -229,6 +255,12 @@ function render() {
         c.textContent = asset.codec.slice(0, 16);
         badges.append(c);
       }
+      if (asset.duration) {
+        const dur = document.createElement('span');
+        dur.className = 'asset-meta';
+        dur.textContent = formatDuration(asset.duration);
+        badges.append(dur);
+      }
       if (asset.hasSubtitles && asset.subtitles?.length) {
         const sub = document.createElement('span');
         sub.className = 'asset-subtag';
@@ -242,6 +274,59 @@ function render() {
       badges.append(dimensions);
     }
     if (badges.childNodes.length > 0) info.append(badges);
+
+    // Card Quick Actions (Preview, Assemble, FFmpeg command)
+    const actionsBar = document.createElement('div');
+    actionsBar.className = 'asset-actions';
+
+    // Preview button
+    if (['image', 'video', 'audio'].includes(asset.type) && !isStream) {
+      const prevBtn = document.createElement('button');
+      prevBtn.type = 'button';
+      prevBtn.className = 'btn-card-action';
+      prevBtn.textContent = `👁 ${t('previewBtn')}`;
+      prevBtn.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        openMediaPreview(asset);
+      });
+      actionsBar.append(prevBtn);
+    }
+
+    // Stream Assembly or Copy FFmpeg Command
+    if (isStream) {
+      if (state.companion.connected) {
+        const assembleBtn = document.createElement('button');
+        assembleBtn.type = 'button';
+        assembleBtn.className = 'btn-card-action btn-assemble';
+        assembleBtn.textContent = t('assembleWithCompanion');
+        assembleBtn.addEventListener('click', e => {
+          e.preventDefault();
+          e.stopPropagation();
+          assembleStreamViaCompanion(asset);
+        });
+        actionsBar.append(assembleBtn);
+      } else {
+        const ffmpegBtn = document.createElement('button');
+        ffmpegBtn.type = 'button';
+        ffmpegBtn.className = 'btn-card-action';
+        ffmpegBtn.textContent = t('copyFfmpeg');
+        ffmpegBtn.addEventListener('click', async e => {
+          e.preventDefault();
+          e.stopPropagation();
+          const cmd = generateFfmpegCommand(asset.url, safeDownloadName(asset, 1, state.page?.domain));
+          try {
+            await navigator.clipboard.writeText(cmd);
+            notice(t('ffmpegCopied'));
+          } catch (_) {
+            notice(t('copyFail'), true);
+          }
+        });
+        actionsBar.append(ffmpegBtn);
+      }
+    }
+
+    if (actionsBar.childNodes.length > 0) info.append(actionsBar);
 
     const badge = document.createElement('span');
     badge.className = 'asset-type';
@@ -344,6 +429,49 @@ async function downloadSelected() {
   } finally { setBusy(false); }
 }
 
+function assembleStreamViaCompanion(asset) {
+  if (!chrome.runtime?.sendNativeMessage) {
+    notice(t('streamNotDirect'), true);
+    return;
+  }
+  const jobId = `companion-${Date.now()}`;
+  const filename = safeDownloadName(asset, state.activeDownloads.size + 1, state.page?.domain);
+  recordDownloadJob(jobId, {
+    id: jobId,
+    url: asset.url,
+    filename,
+    domain: state.page?.domain,
+    format: asset.format,
+    state: 'in_progress',
+    bytesReceived: 0,
+    totalBytes: 0,
+    isCompanion: true
+  });
+  notice(t('assemblyStarted'));
+  try {
+    chrome.runtime.sendNativeMessage('com.knoux.grabflow.companion', {
+      action: 'assemble', url: asset.url, output: filename, jobId
+    }, resp => {
+      if (chrome.runtime.lastError || !resp || resp.status !== 'complete') {
+        const err = chrome.runtime.lastError?.message || resp?.error || t('assemblyFailed');
+        recordDownloadJob(jobId, { state: 'failed', error: err });
+        notice(err, true);
+      } else {
+        recordDownloadJob(jobId, {
+          state: 'complete',
+          bytesReceived: resp.bytes,
+          fileSize: resp.bytes,
+          filename: resp.output || filename
+        });
+        notice(t('assemblySuccess'));
+      }
+    });
+  } catch (err) {
+    recordDownloadJob(jobId, { state: 'failed', error: err.message });
+    notice(err.message, true);
+  }
+}
+
 function recordDownloadJob(id, details) {
   state.activeDownloads.set(id, { ...(state.activeDownloads.get(id) || {}), ...details });
   renderDownloads();
@@ -359,7 +487,6 @@ function renderDownloads() {
     return;
   }
   const frag = document.createDocumentFragment();
-  // Most recent first
   for (const item of [...items].reverse()) {
     const card = document.createElement('div');
     card.className = 'dl-card';
@@ -369,14 +496,14 @@ function renderDownloads() {
 
     const name = document.createElement('div');
     name.className = 'dl-card-name';
-    name.textContent = item.filename ? item.filename.split('/').pop() : (item.url ? item.url.split('/').pop() : 'Download');
+    name.textContent = item.filename ? item.filename.split('/').pop().split('\\').pop() : (item.url ? item.url.split('/').pop() : 'Download');
     name.title = item.url;
 
     const badge = document.createElement('span');
     const st = item.state || 'in_progress';
     badge.className = `dl-state-badge ${st}`;
     badge.textContent = st === 'complete' ? t('stateComplete')
-      : (st === 'interrupted' ? t('stateInterrupted') : t('stateInProgress'));
+      : (st === 'interrupted' ? t('stateInterrupted') : (st === 'failed' ? t('stateFailed') : t('stateInProgress')));
 
     top.append(name, badge);
     card.append(top);
@@ -414,23 +541,27 @@ function renderDownloads() {
       openBtn.className = 'dl-action-btn';
       openBtn.textContent = t('openFile');
       openBtn.addEventListener('click', () => {
-        if (chrome.downloads?.open) chrome.downloads.open(item.id);
+        if (typeof item.id === 'number' && chrome.downloads?.open) chrome.downloads.open(item.id);
       });
       const showBtn = document.createElement('button');
       showBtn.type = 'button';
       showBtn.className = 'dl-action-btn';
       showBtn.textContent = t('showFolder');
       showBtn.addEventListener('click', () => {
-        if (chrome.downloads?.show) chrome.downloads.show(item.id);
+        if (typeof item.id === 'number' && chrome.downloads?.show) chrome.downloads.show(item.id);
       });
-      actions.append(openBtn, showBtn);
-    } else if (st === 'interrupted') {
+      if (typeof item.id === 'number') actions.append(openBtn, showBtn);
+    } else if (st === 'interrupted' || st === 'failed') {
       const retryBtn = document.createElement('button');
       retryBtn.type = 'button';
       retryBtn.className = 'dl-action-btn';
       retryBtn.textContent = t('retry');
       retryBtn.addEventListener('click', () => {
-        chrome.downloads.download({url: item.url, filename: item.filename, conflictAction: 'uniquify'});
+        if (item.isCompanion) {
+          assembleStreamViaCompanion({url: item.url, format: item.format, name: item.filename});
+        } else {
+          chrome.downloads?.download({url: item.url, filename: item.filename, conflictAction: 'uniquify'});
+        }
       });
       actions.append(retryBtn);
     } else if (st === 'in_progress') {
@@ -439,7 +570,12 @@ function renderDownloads() {
       cancelBtn.className = 'dl-action-btn';
       cancelBtn.textContent = t('cancel');
       cancelBtn.addEventListener('click', () => {
-        if (chrome.downloads?.cancel) chrome.downloads.cancel(item.id);
+        if (item.isCompanion && chrome.runtime?.sendNativeMessage) {
+          chrome.runtime.sendNativeMessage('com.knoux.grabflow.companion', {action: 'cancel', jobId: item.id});
+          recordDownloadJob(item.id, {state: 'failed', error: 'Cancelled by user'});
+        } else if (typeof item.id === 'number' && chrome.downloads?.cancel) {
+          chrome.downloads.cancel(item.id);
+        }
       });
       actions.append(cancelBtn);
     }
@@ -505,11 +641,61 @@ async function checkNativeCompanion() {
           ui.companionStatus.textContent = t('companionConnected');
         }
       }
+      render();
     });
   } catch (_) {
     state.companion.connected = false;
     if (ui.companionStatus) ui.companionStatus.textContent = t('companionMissing');
   }
+}
+
+/* Media Preview Drawer/Modal */
+function openMediaPreview(asset) {
+  if (!ui.previewModal || !asset) return;
+  state.previewingAsset = asset;
+  ui.previewContent.replaceChildren();
+  ui.previewTitle.textContent = `${t('mediaPreview')} — ${asset.type.toUpperCase()}`;
+  ui.previewMeta.textContent = `${asset.name} (${asset.resolution || asset.format || asset.type})`;
+
+  if (asset.type === 'video') {
+    const video = document.createElement('video');
+    video.controls = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.src = asset.url;
+    if (asset.poster) video.poster = asset.poster;
+    video.onerror = () => {
+      ui.previewContent.innerHTML = `<div class="empty"><div style="font-size:20px;">⚠️</div><div>${t('corsNotice')}</div></div>`;
+    };
+    ui.previewContent.append(video);
+  } else if (asset.type === 'audio') {
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    audio.autoplay = true;
+    audio.src = asset.url;
+    audio.onerror = () => {
+      ui.previewContent.innerHTML = `<div class="empty"><div style="font-size:20px;">⚠️</div><div>${t('corsNotice')}</div></div>`;
+    };
+    ui.previewContent.append(audio);
+  } else if (asset.type === 'image') {
+    const img = document.createElement('img');
+    img.src = asset.url;
+    img.alt = asset.name;
+    img.onerror = () => {
+      ui.previewContent.innerHTML = `<div class="empty"><div style="font-size:20px;">⚠️</div><div>${t('corsNotice')}</div></div>`;
+    };
+    ui.previewContent.append(img);
+  }
+
+  ui.previewActionBtn.disabled = !isDownloadableAsset(asset);
+  ui.previewModal.hidden = false;
+}
+
+function closeMediaPreview() {
+  if (!ui.previewModal) return;
+  ui.previewModal.hidden = true;
+  ui.previewContent.replaceChildren();
+  state.previewingAsset = null;
 }
 
 if (chrome.downloads?.onChanged?.addListener) {
@@ -551,11 +737,41 @@ ui.search.addEventListener('input', render);
 ui.sortMode.addEventListener('change', render);
 ui.largeImages.addEventListener('change', render);
 
-ui.csvBtn.addEventListener('click', async () => {
+ui.csvBtn?.addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(exportAssetsCsv(visibleAssets()));
     notice(t('csvCopied'));
   } catch (_) { notice(t('copyFail'), true); }
+});
+
+ui.exportJsonBtn?.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(exportAssetsJson(visibleAssets()));
+    notice(t('jsonCopied'));
+  } catch (_) { notice(t('copyFail'), true); }
+});
+
+ui.previewCloseBtn?.addEventListener('click', closeMediaPreview);
+ui.previewBackdrop?.addEventListener('click', closeMediaPreview);
+
+ui.previewCopyBtn?.addEventListener('click', async () => {
+  if (state.previewingAsset?.url) {
+    try {
+      await navigator.clipboard.writeText(state.previewingAsset.url);
+      notice(t('copied'));
+    } catch (_) { notice(t('copyFail'), true); }
+  }
+});
+
+ui.previewActionBtn?.addEventListener('click', () => {
+  if (state.previewingAsset && isDownloadableAsset(state.previewingAsset)) {
+    const asset = state.previewingAsset;
+    closeMediaPreview();
+    state.selected.clear();
+    state.selected.add(asset.url);
+    render();
+    downloadSelected();
+  }
 });
 
 document.querySelectorAll('[data-filter]').forEach(tab => tab.addEventListener('click', () => {

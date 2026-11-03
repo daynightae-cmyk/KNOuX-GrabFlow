@@ -1,0 +1,53 @@
+{
+  "name": "knoux-grabflow-vscode",
+  "displayName": "KNOuX GrabFlow — Media Companion",
+  "description": "Inspect streaming manifests (HLS/DASH), generate FFmpeg assembly commands, and invoke KNOuX GrabFlow desktop companion directly from VS Code.",
+  "version": "0.6.0",
+  "publisher": "knoux-labs",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onCommand:knouxGrabflow.inspectMedia",
+    "onCommand:knouxGrabflow.assembleStream",
+    "onCommand:knouxGrabflow.generateFfmpegCommand"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "knouxGrabflow.inspectMedia",
+        "title": "KNOuX GrabFlow: Inspect Stream / Media URL",
+        "category": "KNOuX GrabFlow"
+      },
+      {
+        "command": "knouxGrabflow.assembleStream",
+        "title": "KNOuX GrabFlow: Assemble HLS/DASH Stream via Companion",
+        "category": "KNOuX GrabFlow"
+      },
+      {
+        "command": "knouxGrabflow.generateFfmpegCommand",
+        "title": "KNOuX GrabFlow: Copy FFmpeg Assembly Command",
+        "category": "KNOuX GrabFlow"
+      }
+    ],
+    "configuration": {
+      "title": "KNOuX GrabFlow",
+      "properties": {
+        "knouxGrabflow.ffmpegPath": {
+          "type": "string",
+          "default": "ffmpeg",
+          "description": "Custom path to local FFmpeg executable."
+        },
+        "knouxGrabflow.ffprobePath": {
+          "type": "string",
+          "default": "ffprobe",
+          "description": "Custom path to local FFprobe executable."
+        }
+      }
+    }
+  }
+}

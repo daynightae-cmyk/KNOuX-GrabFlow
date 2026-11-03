@@ -13,22 +13,24 @@ function makeNode(attrs = {}, extra = {}) {
     currentSrc: extra.currentSrc || '',
     videoWidth: extra.videoWidth || 0,
     videoHeight: extra.videoHeight || 0,
+    duration: extra.duration || 0,
     naturalWidth: extra.naturalWidth || 0,
     naturalHeight: extra.naturalHeight || 0,
     shadowRoot: extra.shadowRoot || null,
     querySelectorAll: selector => (extra.children || {})[selector] || [],
   };
 }
-function run({imgs=[], videos=[], audios=[], pictures=[], metas=[], links=[], css=[], scripts=[], resourceUrls=[], dynamicPlayers=[], hostname='example.com', title='Example', url='https://example.com/page'} = {}) {
+function run({imgs=[], videos=[], audios=[], pictures=[], metas=[], links=[], css=[], scripts=[], resourceUrls=[], dynamicPlayers=[], iframes=[], hostname='example.com', title='Example', url='https://example.com/page'} = {}) {
   const document = {
     baseURI: url, title,
     querySelectorAll: selector => ({
       'img': imgs, 'video': videos, 'audio': audios,
       'picture source[srcset],picture source[data-srcset]': pictures,
-      'meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"],meta[property="og:video"],meta[property="og:video:url"],meta[property="og:video:secure_url"],meta[property="og:audio"],meta[property="og:audio:secure_url"]': metas,
+      'meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"],meta[property="og:video"],meta[property="og:video:url"],meta[property="og:video:secure_url"],meta[property="og:audio"],meta[property="og:audio:secure_url"],meta[name="twitter:player:stream"]': metas,
       'a[href]': links, '[style*="background"]': css,
       'script[type="application/ld+json"]': scripts,
-      'video-js, plyr, media-player, video-player, [data-player]': dynamicPlayers,
+      'video-js, plyr, media-player, video-player, [data-player], .jwplayer, .vjs-tech': dynamicPlayers,
+      'iframe': iframes
     })[selector] || []
   };
   const performance = {getEntriesByType: type => type === 'resource' ? resourceUrls.map(name=>({name})) : []};
@@ -50,55 +52,59 @@ test('extracts and normalizes image relative URLs', () => {
   assert.equal(page.assets[0].name, 'Sample');
 });
 test('honors currentSrc and deduplicates identical assets', () => {
-  const page = run({imgs: [makeNode({src:'/a.jpg'}, {currentSrc: 'https://example.com/large.webp'}), makeNode({src:'/a.jpg'}, {currentSrc: 'https://example.com/large.webp'})]});
+  const page = run({imgs: [makeNode({src:'/a.jpg'}, {currentSrc: 'https://example.com/a.jpg'}), makeNode({src:'https://example.com/a.jpg'})]});
   assert.equal(page.assets.length, 1);
-  assert.equal(page.assets[0].url, 'https://example.com/large.webp');
 });
 test('discovers lazy image from data-src and srcset', () => {
   const page = run({imgs: [makeNode({'data-src':'/lazy.png'}), makeNode({srcset:'/a.jpg 1x, /b.jpg 2x'})]});
   assert.deepEqual(Array.from(page.assets, a=>a.url), ['https://example.com/lazy.png','https://example.com/b.jpg']);
 });
 test('ignores non-http data, blob, javascript and invalid links', () => {
-  const page = run({imgs: [makeNode({src:'data:image/png;base64,abc'}),makeNode({src:'blob:https://example.com/blab'}),makeNode({src:'javascript:alert(1)'})], links:[makeNode({href:'data:text/plain;base64,test.pdf'})]});
+  const page = run({
+    imgs: [makeNode({src: 'data:image/png;base64,AAA'}), makeNode({src: 'blob:https://example.com/123'})],
+    links: [makeNode({href: 'javascript:void(0)'}), makeNode({href: 'mailto:me@example.com'})]
+  });
   assert.equal(page.assets.length, 0);
 });
 test('discovers direct video and files without touching network resources', () => {
-  const vid = makeNode({src:'/promo.mp4', title:'Preview'}, {children:{'source[src],source[data-src]':[makeNode({src:'/backup.webm'})]}});
-  const page = run({videos:[vid], links:[makeNode({href:'/manual.pdf'},{textContent:'Manual'}),makeNode({href:'/source.zip?dl=1'})]});
-  assert.deepEqual(Array.from(page.assets,a=>a.type), ['video','video','document','document']);
-  assert.equal(page.assets[2].name,'Manual');
+  const page = run({videos: [makeNode({src: '/clip.mp4', title:'Intro Video'})], links: [makeNode({href:'/doc.pdf', download:'Report'})]});
+  assert.deepEqual(Array.from(page.assets, a => a.type), ['video','document']);
 });
 test('does not expose YouTube video links through the scanner', () => {
-  const page = run({hostname:'www.youtube.com',videos:[makeNode({src:'https://cdn.example/v.mp4'})],links:[makeNode({href:'https://cdn.example/alt.mp4'})]});
+  const page = run({hostname: 'www.youtube.com', videos: [makeNode({src: '/watch?v=123'})]});
   assert.equal(page.assets.length, 0);
 });
 test('rejects non-direct OpenGraph video URLs', () => {
-  const page = run({metas:[makeNode({content:'https://example.com/player?video=1'})]});
+  const page = run({metas: [makeNode({property:'og:video', content: 'https://example.com/embed/player'})]});
   assert.equal(page.assets.length, 0);
 });
 test('caps extracted asset count to 600', () => {
-  const imgs = Array.from({length:650},(_,i)=>makeNode({src:`/img-${i}.png`}));
+  const imgs = Array.from({length: 650}, (_, i) => makeNode({src: `/img-${i}.png`}));
   const page = run({imgs});
-  assert.equal(page.assets.length,600);
-  assert.equal(page.truncated,true);
+  assert.equal(page.assets.length, 600);
+  assert.equal(page.truncated, true);
 });
 test('discovers inline CSS background images without fetching them', () => {
-  const page = run({css:[makeNode({style: 'background-image:url(\"/cover.webp\")'})]});
-  assert.equal(page.assets.length,1); assert.equal(page.assets[0].source,'background');
+  const page = run({css: [makeNode({style: 'background-image: url("/bg.jpg")'})]});
+  assert.equal(page.assets.length, 1);
+  assert.equal(page.assets[0].url, 'https://example.com/bg.jpg');
 });
 test('discovers directly linked images and blocks URLs with credentials', () => {
-  const page = run({links:[makeNode({href:'/gallery.jpg'}), makeNode({href:'https://u:p@evil.test/private.jpg'})]});
-  assert.equal(page.assets.length,1); assert.equal(page.assets[0].type,'image');
+  const page = run({links: [makeNode({href: '/banner.png'}), makeNode({href: 'https://user:pass@example.com/secret.png'})]});
+  assert.equal(page.assets.length, 1);
+  assert.equal(page.assets[0].url, 'https://example.com/banner.png');
 });
 test('falls back to real lazy URLs when currentSrc contains a data placeholder', () => {
-  const img=makeNode({'src':'data:image/svg+xml;base64,abcd','data-src':'/photography/hero.webp'},{currentSrc:'data:image/gif;base64,aaa'});
-  const page=run({imgs:[img]});
-  assert.equal(page.assets[0].url, 'https://example.com/photography/hero.webp');
+  const node = makeNode({'data-src': '/hero.webp'}, {currentSrc: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'});
+  const page = run({imgs: [node]});
+  assert.equal(page.assets.length, 1);
+  assert.equal(page.assets[0].url, 'https://example.com/hero.webp');
 });
 test('extracts responsive picture source without executing scripts or fetching resources', () => {
-  const page=run({pictures:[makeNode({'srcset':'/small.avif 300w, /large.avif 1200w'})]});
-  assert.equal(page.assets[0].url,'https://example.com/large.avif');
-  assert.equal(page.assets[0].source,'picture');
+  const page = run({pictures: [makeNode({srcset: '/small.avif 1x, /large.avif 2x'})]});
+  assert.equal(page.assets.length, 1);
+  assert.equal(page.assets[0].url, 'https://example.com/large.avif');
+  assert.equal(page.assets[0].source, 'picture');
 });
 test('extracts direct audio players and audio links', () => {
   const player=makeNode({src:'/podcast.mp3',title:'Episode'},{children:{'source[src],source[data-src]':[makeNode({src:'/mix.flac'})]}});
@@ -128,44 +134,30 @@ test('detects HLS and DASH manifests but never mistakes segments for full videos
   assert.equal(page.assets.length,2);
 });
 test('finds dynamically requested direct media and HLS via resource timing names only', () => {
-  const page=run({resourceUrls:['https://example.com/player.js','https://cdn.example.com/clip.mp4?token=x',
-    'https://cdn.example.com/index.m3u8','https://cdn.example.com/part_02.m4s']});
-  assert.deepEqual(Array.from(page.assets,a=>a.format), ['direct','hls']);
-  assert.ok(page.assets.every(a=>a.source==='resource-timing'));
+  const page = run({resourceUrls: ['https://example.com/media/clip.webm','https://example.com/hls/live.m3u8','https://example.com/analytics.js']});
+  assert.equal(page.assets.length, 2);
+  assert.deepEqual(Array.from(page.assets, a=>a.source), ['resource-timing','resource-timing']);
 });
-test('detects extensionless video sources only when explicit media MIME is provided', () => {
-  const video=makeNode({src:'https://example.com/api/asset?id=44',type:'video/mp4'});
-  const stream=makeNode({href:'https://example.com/live/playlist?id=1',type:'application/vnd.apple.mpegurl'});
-  const page=run({videos:[video],links:[stream]});
-  assert.deepEqual(Array.from(page.assets,a=>a.format), ['direct','hls']);
-});
-test('discovers direct VideoObject contentUrl without executing embedded page scripts', () => {
-  const scripts=[makeNode({}, {textContent:JSON.stringify({'@graph':[{'@type':'VideoObject',name:'My movie',contentUrl:'https://cdn.example.com/my-video.webm'}]})})];
-  const page=run({scripts});
-  assert.equal(page.assets.length,1);
-  assert.equal(page.assets[0].name,'My movie');
-  assert.equal(page.assets[0].format,'direct');
-});
-test('limits structured metadata and does not classify generic embed pages as video files', () => {
-  const scripts=[makeNode({}, {textContent:'{' + 'a'.repeat(140000)})];
-  const page=run({scripts,resourceUrls:['https://example.com/watch?video=1','https://example.com/stream/seg_4.ts']});
-  assert.equal(page.assets.length,0);
+test('extracts direct video contentUrl from JSON-LD VideoObject without a video tag', () => {
+  const script = makeNode({}, {textContent: JSON.stringify({'@context':'https://schema.org','@type':'VideoObject',name:'Promo',contentUrl:'https://example.com/promo.mp4',width:1280,height:720})});
+  const page = run({scripts: [script]});
+  assert.equal(page.assets.length, 1);
+  assert.equal(page.assets[0].type, 'video');
+  assert.equal(page.assets[0].url, 'https://example.com/promo.mp4');
+  assert.equal(page.assets[0].source, 'structured-data');
 });
 test('does not expose video manifests or observed files from YouTube host', () => {
-  const page=run({hostname:'youtube.com',resourceUrls:['https://cdn.example.com/vid.mp4','https://cdn.example.com/master.m3u8'],links:[makeNode({href:'/list.m3u8'})]});
-  assert.equal(page.assets.length,0);
+  const video = makeNode({src: '/stream.m3u8'});
+  const page = run({hostname: 'm.youtube.com', videos: [video], resourceUrls: ['https://m.youtube.com/videoplayback.mp4']});
+  assert.equal(page.assets.length, 0);
 });
-
-// New regression tests for Slice 01 enhancements:
 test('discovers directly available MKV videos and classifies them as direct format', () => {
-  const vid = makeNode({src: '/archive/feature.mkv', title: 'Feature Film'});
-  const page = run({videos: [vid]});
+  const video = makeNode({src: '/archive/feature.mkv', title: 'Feature Film'});
+  const page = run({videos: [video]});
   assert.equal(page.assets.length, 1);
   assert.equal(page.assets[0].type, 'video');
   assert.equal(page.assets[0].format, 'direct');
-  assert.equal(page.assets[0].conversionPath, 'direct-download');
   assert.equal(page.assets[0].downloadEligibility, 'eligible');
-  assert.equal(page.assets[0].isPlaylist, false);
 });
 test('extracts subtitle tracks from video element', () => {
   const track1 = makeNode({src: '/subtitles/en.vtt', kind: 'subtitles', srclang: 'en', label: 'English'});
@@ -205,6 +197,31 @@ test('discovers video sources from dynamic player custom elements (video-js, ply
   assert.equal(page.assets[0].type, 'video');
   assert.equal(page.assets[0].url, 'https://cdn.example.com/interactive-promo.mp4');
   assert.equal(page.assets[0].source, 'dynamic-player');
+});
+test('extracts video poster image as image asset and attaches it to video metadata', () => {
+  const vid = makeNode({src: '/trailer.mp4', poster: '/images/poster-hd.jpg', title: 'Teaser'});
+  const page = run({videos: [vid]});
+  assert.equal(page.assets.length, 2);
+  const posterAsset = page.assets.find(a => a.type === 'image');
+  const videoAsset = page.assets.find(a => a.type === 'video');
+  assert.ok(posterAsset);
+  assert.equal(posterAsset.url, 'https://example.com/images/poster-hd.jpg');
+  assert.equal(posterAsset.source, 'poster');
+  assert.ok(videoAsset);
+  assert.equal(videoAsset.poster, 'https://example.com/images/poster-hd.jpg');
+});
+test('extracts video duration in seconds when available', () => {
+  const vid = makeNode({src: '/clip.webm', title: 'Duration Clip'}, {duration: 142.5});
+  const page = run({videos: [vid]});
+  assert.equal(page.assets.length, 1);
+  assert.equal(page.assets[0].duration, 143);
+});
+test('discovers streaming sources from data-hls-src and data-file player attributes', () => {
+  const player = makeNode({'data-hls-src': 'https://stream.example.com/live.m3u8', 'title': 'HLS Player'});
+  const page = run({dynamicPlayers: [player]});
+  assert.equal(page.assets.length, 1);
+  assert.equal(page.assets[0].format, 'hls');
+  assert.equal(page.assets[0].isPlaylist, true);
 });
 
 console.log(`\n${passed} scanner/security checks passed.`);

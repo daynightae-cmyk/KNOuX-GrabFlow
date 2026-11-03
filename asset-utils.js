@@ -1,11 +1,23 @@
 'use strict';
 /** Deterministic helpers for filtering, export and safe Downloads API file names. */
+
 function filterSortAssets(assets, {type = 'all', query = '', sort = 'page', largeImages = false} = {}) {
   const needle = String(query).toLocaleLowerCase().trim();
-  const result = assets.filter(a =>
-    (type === 'all' || a.type === type) &&
-    (!largeImages || a.type !== 'image' || Math.max(a.width || 0, a.height || 0) >= 800) &&
-    (!needle || `${a.name} ${a.url}`.toLocaleLowerCase().includes(needle)));
+  const result = assets.filter(a => {
+    if (type === 'stream') {
+      if (a.type !== 'video' || !['hls', 'dash'].includes(a.format)) return false;
+    } else if (type !== 'all' && a.type !== type) {
+      return false;
+    }
+    if (largeImages && a.type === 'image' && Math.max(a.width || 0, a.height || 0) < 800) {
+      return false;
+    }
+    if (needle && !`${a.name} ${a.url}`.toLocaleLowerCase().includes(needle)) {
+      return false;
+    }
+    return true;
+  });
+
   if (sort === 'name') result.sort((a, b) => a.name.localeCompare(b.name));
   if (sort === 'type') result.sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
   return result;
@@ -60,7 +72,9 @@ function classifyMediaAsset(asset) {
     subtitles: Array.isArray(asset.subtitles) ? asset.subtitles : [],
     supportedConversionPath: isPlaylist ? 'companion-assembly' : 'direct-download',
     downloadEligibility: isPlaylist ? 'requires-companion' : 'eligible',
-    confidence: asset.source === 'resource-timing' ? 'medium' : 'high'
+    confidence: asset.source === 'resource-timing' ? 'medium' : 'high',
+    poster: asset.poster || null,
+    duration: asset.duration || null
   };
 }
 
@@ -85,6 +99,38 @@ function exportAssetsCsv(assets) {
     [a.type, a.name, a.url, a.width || '', a.height || '', a.source || 'dom', a.format || ''].map(quote).join(','))].join('\r\n');
 }
 
+function exportAssetsJson(assets) {
+  const clean = assets.map(a => classifyMediaAsset(a) || {
+    url: a.url, type: a.type, name: a.name, source: a.source
+  });
+  return JSON.stringify(clean, null, 2);
+}
+
+function generateFfmpegCommand(url, outputName = 'output.mp4') {
+  const safeOut = String(outputName).replace(/[<>:"/\\|?*]/g, '_').slice(0, 120);
+  const target = safeOut.endsWith('.mp4') || safeOut.endsWith('.mkv') ? safeOut : `${safeOut}.mp4`;
+  return `ffmpeg -hide_banner -nostdin -i "${url}" -c copy -movflags +faststart "${target}"`;
+}
+
+function generateCurlCommand(url, outputName = 'file.bin') {
+  const safeOut = String(outputName).replace(/[<>:"/\\|?*]/g, '_').slice(0, 120);
+  return `curl -L -o "${safeOut}" "${url}"`;
+}
+
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '';
+  const s = Math.round(seconds);
+  const hrs = Math.floor(s / 3600);
+  const mins = Math.floor((s % 3600) / 60);
+  const secs = s % 60;
+  if (hrs > 0) {
+    return `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
 if (typeof module !== 'undefined') module.exports = {
-  filterSortAssets, safeDownloadName, exportAssetsCsv, isDownloadableAsset, classifyMediaAsset, summarizeDownloads
+  filterSortAssets, safeDownloadName, exportAssetsCsv, exportAssetsJson,
+  isDownloadableAsset, classifyMediaAsset, summarizeDownloads,
+  generateFfmpegCommand, generateCurlCommand, formatDuration
 };

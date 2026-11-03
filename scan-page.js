@@ -54,6 +54,8 @@ function scanPageAssets() {
           prior.hasSubtitles = true;
         }
         if (extra.codec && !prior.codec) prior.codec = extra.codec;
+        if (extra.poster && !prior.poster) prior.poster = extra.poster;
+        if (extra.duration && !prior.duration) prior.duration = extra.duration;
       }
       return;
     }
@@ -82,6 +84,8 @@ function scanPageAssets() {
       item.hasAudio = extra.hasAudio ?? null;
       item.hasSubtitles = Boolean(extra.subtitles && extra.subtitles.length > 0);
       if (item.hasSubtitles) item.subtitles = extra.subtitles;
+      if (extra.poster) item.poster = extra.poster;
+      if (extra.duration) item.duration = extra.duration;
     }
     assets.push(item);
   }
@@ -126,22 +130,41 @@ function scanPageAssets() {
     const h = video.videoHeight || Number(video.getAttribute('height')) || 0;
     const tracks = parseTracks(video);
     const mime = video.getAttribute('type') || '';
-    const src = firstHttp(video.currentSrc, video.getAttribute('src'), video.getAttribute('data-src'),
-      video.getAttribute('data-hls'), video.getAttribute('data-video-src'), video.getAttribute('data-manifest'),
-      video.getAttribute('data-stream'), video.getAttribute('data-dash'));
+    const poster = safeUrl(video.getAttribute('poster'));
+    const duration = Number.isFinite(video.duration) && video.duration > 0 ? Math.round(video.duration) : null;
+
+    if (poster) {
+      add('image', poster, (video.getAttribute('title') || 'Video Poster') + ' (Poster)', 'poster');
+    }
+
+    const src = firstHttp(
+      video.currentSrc,
+      video.getAttribute('src'),
+      video.getAttribute('data-src'),
+      video.getAttribute('data-hls'),
+      video.getAttribute('data-video-src'),
+      video.getAttribute('data-manifest'),
+      video.getAttribute('data-stream'),
+      video.getAttribute('data-dash'),
+      video.getAttribute('data-file'),
+      video.getAttribute('data-media-url'),
+      video.getAttribute('data-orig-url'),
+      video.getAttribute('data-hls-src'),
+      video.getAttribute('data-mpd-src')
+    );
     if (src) {
       add('video', src, video.getAttribute('title') || video.getAttribute('aria-label'), 'video', w, h, mime,
-        {subtitles: tracks});
+        {subtitles: tracks, poster, duration});
     }
     const sources = (typeof video.querySelectorAll === 'function') ? (video.querySelectorAll('source[src],source[data-src]') || []) : [];
     for (const source of sources) {
-      const sSrc = firstHttp(source.getAttribute('src'), source.getAttribute('data-src'));
+      const sSrc = firstHttp(source.getAttribute('src'), source.getAttribute('data-src'), source.getAttribute('data-stream'));
       const sMime = source.getAttribute('type') || '';
       const sW = Number(source.getAttribute('width') || source.getAttribute('res')) || w;
       const sH = Number(source.getAttribute('height')) || h;
       if (sSrc && classifyVideo(sSrc, sMime)) {
         add('video', sSrc, video.getAttribute('title') || source.getAttribute('title'), 'video', sW, sH, sMime,
-          {subtitles: tracks});
+          {subtitles: tracks, poster, duration});
       }
     }
   }
@@ -171,21 +194,48 @@ function scanPageAssets() {
     // Modern dynamic web component players (Video.js, Plyr, media-player, shadow DOM)
     let playersChecked = 0;
     try {
-      const dynamicList = document.querySelectorAll('video-js, plyr, media-player, video-player, [data-player]') || [];
+      const dynamicList = document.querySelectorAll('video-js, plyr, media-player, video-player, [data-player], .jwplayer, .vjs-tech') || [];
       for (const container of dynamicList) {
         if (++playersChecked > 50 || assets.length >= LIMIT) break;
+        // Shadow root traversal (up to 2 levels)
         if (container.shadowRoot && typeof container.shadowRoot.querySelectorAll === 'function') {
           for (const shadowVideo of container.shadowRoot.querySelectorAll('video')) {
             scanVideoElement(shadowVideo);
           }
+          for (const subContainer of container.shadowRoot.querySelectorAll('video-js, plyr, media-player, video-player')) {
+            if (subContainer.shadowRoot && typeof subContainer.shadowRoot.querySelectorAll === 'function') {
+              for (const innerVideo of subContainer.shadowRoot.querySelectorAll('video')) {
+                scanVideoElement(innerVideo);
+              }
+            }
+          }
         }
-        const directDataSrc = firstHttp(container.getAttribute('data-src'), container.getAttribute('data-video-src'),
-          container.getAttribute('data-hls'), container.getAttribute('data-stream'), container.getAttribute('data-manifest'));
+        const directDataSrc = firstHttp(
+          container.getAttribute('data-src'), container.getAttribute('data-video-src'),
+          container.getAttribute('data-hls'), container.getAttribute('data-stream'),
+          container.getAttribute('data-manifest'), container.getAttribute('data-file'),
+          container.getAttribute('data-media-url'), container.getAttribute('data-hls-src')
+        );
         if (directDataSrc && classifyVideo(directDataSrc)) {
           add('video', directDataSrc, container.getAttribute('title') || container.getAttribute('aria-label'), 'dynamic-player');
         }
       }
     } catch (_) { /* ignore if not queryable */ }
+
+    // Same-origin iframe scanning (bounded to 6 frames, safe from cross-origin errors)
+    try {
+      const iframes = document.querySelectorAll('iframe');
+      let framesChecked = 0;
+      for (const frame of iframes) {
+        if (++framesChecked > 6 || assets.length >= LIMIT) break;
+        try {
+          const doc = frame.contentDocument || frame.contentWindow?.document;
+          if (doc && typeof doc.querySelectorAll === 'function') {
+            for (const v of doc.querySelectorAll('video')) scanVideoElement(v);
+          }
+        } catch (_) { /* cross-origin frame - expected and cleanly skipped */ }
+      }
+    } catch (_) { /* defensive */ }
   }
   for (const audio of document.querySelectorAll('audio')) {
     add('audio', firstHttp(audio.currentSrc, audio.getAttribute('src'), audio.getAttribute('data-src')),
@@ -201,7 +251,7 @@ function scanPageAssets() {
     if (assets.length >= LIMIT) break;
   }
   // Only direct media formats from OpenGraph; no playlist, page player or DRM.
-  for (const meta of document.querySelectorAll('meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"],meta[property="og:video"],meta[property="og:video:url"],meta[property="og:video:secure_url"],meta[property="og:audio"],meta[property="og:audio:secure_url"]')) {
+  for (const meta of document.querySelectorAll('meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"],meta[property="og:video"],meta[property="og:video:url"],meta[property="og:video:secure_url"],meta[property="og:audio"],meta[property="og:audio:secure_url"],meta[name="twitter:player:stream"]')) {
     const tag = meta.getAttribute('property') || meta.getAttribute('name') || '';
     const value = meta.getAttribute('content');
     const type = tag.includes('image') ? 'image' : tag.includes('audio') ? 'audio' : 'video';
@@ -252,7 +302,8 @@ function scanPageAssets() {
         if (typeof content === 'string' && classifyVideo(content, mime)) {
           const w = Number(value.width) || 0;
           const h = Number(value.height) || 0;
-          add('video', content, value.name || '', 'structured-data', w, h, mime);
+          const poster = safeUrl(value.thumbnailUrl || value.thumbnail);
+          add('video', content, value.name || '', 'structured-data', w, h, mime, {poster});
         }
       }
       for (const k of ['@graph', 'mainEntity', 'video', 'itemListElement']) if (value[k]) visit(value[k], depth + 1);

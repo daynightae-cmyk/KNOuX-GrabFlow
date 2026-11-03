@@ -19,10 +19,13 @@ jobs:
           node --check popup.js
           node --check scan-page.js
           node --check asset-utils.js
+          node --check vscode-companion/extension.js
       - name: Scanner and security tests
         run: node tests/test-scanner.cjs
       - name: Utility and export tests
         run: node tests/test-utilities.cjs
+      - name: VS Code companion contract tests
+        run: node tests/test-vscode-companion.cjs
       - name: Native companion host contract tests
         run: python3 tests/test-companion-host.py
       - name: FFmpeg companion safety tests
@@ -58,5 +61,5 @@ jobs:
         run: python tests/test-ui-inmemory.py
       - name: Popup browser UI smoke (HTTP server)
         run: python tests/test-ui.py
-      - name: 18-Fixture Real Browser Matrix E2E Test Suite
+      - name: 20-Fixture Real Browser Matrix E2E Test Suite
         run: python tests/test-e2e-matrix.py

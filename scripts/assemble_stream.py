@@ -7,10 +7,12 @@ No secrets, cookies, authentication, decryption, bypass or browser interception.
 import argparse
 import ipaddress
 import json
+import os
 from pathlib import Path
 import shutil
 import socket
 import subprocess
+import sys
 from urllib.parse import urlsplit
 
 
@@ -19,7 +21,7 @@ def validate(url: str, output: Path, *, allow_local=False):
     if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password:
         raise ValueError('Only HTTP(S) media URLs without embedded credentials are supported')
     path = parsed.path.lower()
-    if not path.endswith(('.m3u8', '.mpd')):
+    if not path.endswith(('.m3u8', '.mpd')) and 'm3u8' not in parsed.query.lower() and 'mpd' not in parsed.query.lower():
         raise ValueError('URL path must be an HLS .m3u8 or DASH .mpd playlist')
     if output.suffix.lower() not in ('.mp4', '.mkv'):
         raise ValueError('Output filename must end in .mp4 or .mkv')
@@ -31,6 +33,22 @@ def validate(url: str, output: Path, *, allow_local=False):
             if not ip.is_global:
                 raise ValueError('Local/private-network URL blocked by default; use --allow-local for a controlled fixture')
     return parsed
+
+
+def find_ffmpeg(custom: str = 'ffmpeg'):
+    binary = shutil.which(custom)
+    if not binary and sys.platform == 'win32':
+        candidates = [
+            Path(os.environ.get('LOCALAPPDATA', '')) / 'Programs' / 'ffmpeg' / 'bin' / 'ffmpeg.exe',
+            Path(os.environ.get('LOCALAPPDATA', '')) / 'Microsoft' / 'WinGet' / 'Links' / 'ffmpeg.exe',
+            Path(r'C:\ffmpeg\bin\ffmpeg.exe'),
+            Path(r'C:\ProgramData\chocolatey\bin\ffmpeg.exe'),
+            Path(os.environ.get('USERPROFILE', '')) / 'scoop' / 'apps' / 'ffmpeg' / 'current' / 'bin' / 'ffmpeg.exe',
+        ]
+        for c in candidates:
+            if c.is_file():
+                return str(c)
+    return binary
 
 
 def make_command(ffmpeg: str, url: str, output: Path):
@@ -49,7 +67,7 @@ def main():
     a = ap.parse_args()
     try:
         validate(a.url, a.output, allow_local=a.allow_local)
-        ffmpeg = shutil.which(a.ffmpeg)
+        ffmpeg = find_ffmpeg(a.ffmpeg)
         if not ffmpeg:
             raise RuntimeError('FFmpeg is not installed or not on PATH')
         if not a.output.parent.exists():
@@ -70,6 +88,7 @@ def main():
         return 0
     except (ValueError, RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
         ap.exit(2, f'ERROR: {exc}\n')
+
 
 if __name__ == '__main__':
     raise SystemExit(main())

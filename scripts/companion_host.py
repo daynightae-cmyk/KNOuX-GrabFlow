@@ -25,7 +25,7 @@ import subprocess
 import sys
 from urllib.parse import urlsplit
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 HOST_NAME = "com.knoux.grabflow.companion"
 
 
@@ -40,6 +40,20 @@ def is_safe_destination(path: Path) -> bool:
         return path.parent.exists() and len(path.parts) > 1
     except Exception:
         return False
+
+
+def resolve_safe_output(out_str: str) -> Path:
+    """Resolve an output path safely, placing relative filenames into user's Downloads."""
+    p = Path(out_str)
+    if not p.is_absolute() or len(p.parts) == 1:
+        downloads = Path.home() / 'Downloads'
+        if not downloads.exists():
+            downloads = Path.home()
+        safe_name = p.name.replace(':', '_').replace('/', '_').replace('\\', '_')
+        if not safe_name.endswith('.mp4') and not safe_name.endswith('.mkv'):
+            safe_name += '.mp4'
+        p = downloads / safe_name
+    return p.resolve()
 
 
 def validate_media_url(url: str, allow_local: bool = False):
@@ -64,15 +78,16 @@ def validate_media_url(url: str, allow_local: bool = False):
 
 
 def find_binaries():
-    """Locate local ffmpeg and ffprobe executables."""
+    """Locate local ffmpeg and ffprobe executables across standard Windows paths."""
     ffmpeg = shutil.which('ffmpeg')
     ffprobe = shutil.which('ffprobe')
-    # On Windows, check common user-local locations if not in PATH
     if sys.platform == 'win32' and not ffmpeg:
         common_paths = [
             Path(os.environ.get('LOCALAPPDATA', '')) / 'Programs' / 'ffmpeg' / 'bin' / 'ffmpeg.exe',
+            Path(os.environ.get('LOCALAPPDATA', '')) / 'Microsoft' / 'WinGet' / 'Links' / 'ffmpeg.exe',
             Path(r'C:\ffmpeg\bin\ffmpeg.exe'),
             Path(r'C:\ProgramData\chocolatey\bin\ffmpeg.exe'),
+            Path(os.environ.get('USERPROFILE', '')) / 'scoop' / 'apps' / 'ffmpeg' / 'current' / 'bin' / 'ffmpeg.exe',
         ]
         for p in common_paths:
             if p.is_file():
@@ -152,7 +167,9 @@ class CompanionHost:
         out_str = msg.get('output', '')
         if not out_str:
             raise ValueError('Output path is required')
-        out_path = Path(out_str).resolve()
+        
+        # If relative or filename-only, place in Downloads safely
+        out_path = resolve_safe_output(out_str)
         if not is_safe_destination(out_path):
             raise ValueError('Invalid destination path or file already exists (no-clobber enforced)')
 

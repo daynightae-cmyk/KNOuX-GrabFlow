@@ -15,7 +15,7 @@
           <span class="stag-glow"></span>
         </div>
         <div>
-          <div class="eyebrow">KNOuX LABS <span class="vtag">PROD 0.5</span></div>
+          <div class="eyebrow">KNOuX LABS <span class="vtag">ULTIMATE 0.6</span></div>
           <div class="brand-name">Grab<span>Flow</span><span class="trademark">™</span></div>
         </div>
       </div>
@@ -49,6 +49,7 @@
         <div class="tabs" role="tablist" aria-label="Asset category">
           <button type="button" class="tab active" data-filter="all" role="tab" aria-selected="true" aria-pressed="true"><span data-i18n="all">All</span> <span class="pill" id="countAll">0</span></button>
           <button type="button" class="tab video-tab" data-filter="video" role="tab" aria-selected="false" aria-pressed="false"><span data-i18n="videos">Video</span> <span class="pill" id="countVideo">0</span></button>
+          <button type="button" class="tab stream-tab" data-filter="stream" role="tab" aria-selected="false" aria-pressed="false"><span data-i18n="streams">Streams</span> <span class="pill" id="countStream">0</span></button>
           <button type="button" class="tab" data-filter="image" role="tab" aria-selected="false" aria-pressed="false"><span data-i18n="images">Images</span> <span class="pill" id="countImage">0</span></button>
           <button type="button" class="tab" data-filter="audio" role="tab" aria-selected="false" aria-pressed="false"><span data-i18n="audio">Audio</span> <span class="pill" id="countAudio">0</span></button>
           <button type="button" class="tab" data-filter="document" role="tab" aria-selected="false" aria-pressed="false"><span data-i18n="docs">Files</span> <span class="pill" id="countDocument">0</span></button>
@@ -70,11 +71,13 @@
         <div class="selection-bar">
           <span id="selectedLabel">0 selected</span>
           <div class="select-actions">
-            <button id="csvBtn" type="button" data-i18n="exportCsv">CSV</button>
+            <button id="csvBtn" type="button" class="action-link" data-i18n="exportCsv">CSV</button>
             <span>·</span>
-            <button id="selectVisible" type="button" data-i18n="selectVisible">Select visible</button>
+            <button id="exportJsonBtn" type="button" class="action-link" data-i18n="exportJson">JSON</button>
             <span>·</span>
-            <button id="clearSelection" type="button" data-i18n="clear">Clear</button>
+            <button id="selectVisible" type="button" class="action-link" data-i18n="selectVisible">Select visible</button>
+            <span>·</span>
+            <button id="clearSelection" type="button" class="action-link" data-i18n="clear">Clear</button>
           </div>
         </div>
       </section>
@@ -105,6 +108,27 @@
         </div>
       </div>
     </section>
+
+    <!-- Media Preview Modal -->
+    <div id="previewModal" class="preview-modal" hidden>
+      <div class="preview-backdrop" id="previewBackdrop"></div>
+      <div class="preview-card" role="dialog" aria-modal="true" aria-labelledby="previewTitle">
+        <div class="preview-header">
+          <span id="previewTitle" class="preview-title" data-i18n="mediaPreview">Media Preview</span>
+          <button id="previewCloseBtn" type="button" class="preview-close" aria-label="Close Preview">✕</button>
+        </div>
+        <div id="previewContent" class="preview-content">
+          <!-- Dynamically populated -->
+        </div>
+        <div class="preview-footer">
+          <div id="previewMeta" class="preview-meta"></div>
+          <div class="preview-actions">
+            <button id="previewCopyBtn" type="button" class="secondary text-sm" data-i18n="copy">Copy Link</button>
+            <button id="previewActionBtn" type="button" class="primary text-sm" data-i18n="download">Download</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <footer class="footer">
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>

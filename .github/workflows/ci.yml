@@ -36,6 +36,11 @@ jobs:
         run: command -v ffmpeg && command -v ffprobe || (sudo apt-get update && sudo apt-get install -y ffmpeg)
       - name: Real local HLS-to-MP4 integration
         run: python3 tests/test-stream-integration.py
+      - name: Real HLS master + DASH media integrity and no-clobber matrix
+        run: |
+          command -v ffmpeg
+          command -v ffprobe
+          python3 tests/test-stream-matrix.py
       - name: Create deterministic Chrome zip
         run: python3 scripts/package.py
       - name: Stage Chrome ZIP for Actions artifact

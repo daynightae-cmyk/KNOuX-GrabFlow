@@ -15,7 +15,8 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 from companion_host import (
     CompanionHost, HOST_NAME, VERSION,
     read_message, write_message,
-    validate_media_url, is_safe_destination
+    validate_media_url, is_safe_destination,
+    resolve_safe_output
 )
 
 
@@ -47,7 +48,6 @@ class CompanionHostTests(unittest.TestCase):
         self.assertIn('ffprobeAvailable', resp)
 
     def test_ssrf_and_credential_rejections(self):
-        # Local/private host with allow_local=False should raise ValueError
         strict_host = CompanionHost(allow_local=False)
         with self.assertRaises(ValueError):
             validate_media_url('https://user:pass@example.com/stream.m3u8', allow_local=False)
@@ -71,6 +71,12 @@ class CompanionHostTests(unittest.TestCase):
             # Existing file (no-clobber)
             safe_file.write_bytes(b'existing content')
             self.assertFalse(is_safe_destination(safe_file))
+
+    def test_resolve_safe_output(self):
+        p = resolve_safe_output('my_stream.mp4')
+        self.assertTrue(p.is_absolute())
+        self.assertEqual(p.suffix, '.mp4')
+        self.assertTrue(str(p).endswith('my_stream.mp4'))
 
     def test_cancel_nonexistent_job(self):
         resp = self.host.dispatch({'action': 'cancel', 'jobId': 'job-999'})

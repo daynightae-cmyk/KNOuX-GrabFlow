@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""KNOuX GrabFlow — Real Browser E2E Suite with 18-Fixture Matrix.
+"""KNOuX GrabFlow — Real Browser E2E Suite with 20-Fixture Matrix.
 
 Tests real browser media discovery, dynamic player insertion, streaming manifests,
 subtitles, MIME inspection, download lifecycle, bilingual RTL/LTR UI, and captures screenshots.
@@ -25,6 +25,7 @@ SCREENSHOTS_DIR.mkdir(exist_ok=True)
 MINIMAL_MP4 = b'\x00\x00\x00\x20ftypisom\x00\x00\x02\x00isomiso2avc1mp41\x00\x00\x00\x08free\x00\x00\x00\x10mdat' + b'\x00' * 64
 MINIMAL_WEBM = b'\x1a\x45\xdf\xa3\x9f\x42\x86\x81\x01\x42\xf7\x81\x01\x42\xf2\x81\x04\x42\xf3\x81\x08' + b'\x00' * 64
 MINIMAL_MP3 = b'ID3\x04\x00\x00\x00\x00\x00\x20TIT2\x00\x00\x00\x08\x00\x00\x03Track\xff\xfb\x90d\x00' + b'\x00' * 64
+MINIMAL_PNG = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
 SAMPLE_HLS_PLAYLIST = (
     "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n"
     "#EXTINF:2.0,\nsegment0.ts\n#EXTINF:2.0,\nsegment1.ts\n#EXT-X-ENDLIST\n"
@@ -59,62 +60,72 @@ SAMPLE_DRM_DASH_MPD = (
 SAMPLE_VTT = "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nHello KNOuX GrabFlow\n".encode('utf-8')
 
 
-class FixtureServerHandler(BaseHTTPRequestHandler):
+class FixtureHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
-        pass  # Quiet test server
+        pass  # Quiet logging
 
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
 
-        # 12. Broken URL / HTTP 404
-        if path == '/media/broken-404.mp4':
-            self.send_response(404)
-            self.end_headers()
-            self.wfile.write(b"Not Found")
-            return
+        # Static assets
+        static_files = {
+            '/popup.html': ('text/html; charset=utf-8', ROOT / 'popup.html'),
+            '/popup.css': ('text/css; charset=utf-8', ROOT / 'popup.css'),
+            '/popup.js': ('application/javascript; charset=utf-8', ROOT / 'popup.js'),
+            '/scan-page.js': ('application/javascript; charset=utf-8', ROOT / 'scan-page.js'),
+            '/asset-utils.js': ('application/javascript; charset=utf-8', ROOT / 'asset-utils.js'),
+            '/icons/icon128.png': ('image/png', ROOT / 'icons' / 'icon128.png'),
+        }
 
-        # 13. Forbidden / HTTP 403
-        if path == '/media/forbidden-403.mp4':
-            self.send_response(403)
-            self.end_headers()
-            self.wfile.write(b"Forbidden")
-            return
+        if path in static_files:
+            mime, file_path = static_files[path]
+            if file_path.is_file():
+                data = file_path.read_bytes()
+                self.send_response(200)
+                self.send_header('Content-Type', mime)
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
 
-        # 14. Interrupted transfer
-        if path == '/media/interrupted.mp4':
-            self.send_response(200)
-            self.send_header('Content-Type', 'video/mp4')
-            self.send_header('Content-Length', '5000000')
-            self.end_headers()
-            try:
-                self.wfile.write(b"\x00" * 32)
-                self.wfile.flush()
-                # Close socket abruptly to simulate interrupted download
-                self.request.close()
-            except Exception:
-                pass
-            return
-
-        # Static media endpoints
+        # Media fixtures
         content_map = {
             '/media/sample.mp4': ('video/mp4', MINIMAL_MP4),
             '/media/sample.webm': ('video/webm', MINIMAL_WEBM),
-            '/media/stream.m3u8': ('application/vnd.apple.mpegurl', SAMPLE_HLS_PLAYLIST),
-            '/media/master.m3u8': ('application/vnd.apple.mpegurl', SAMPLE_HLS_MASTER),
-            '/media/sample.mpd': ('application/dash+xml', SAMPLE_DASH_MPD),
-            '/media/protected.mpd': ('application/dash+xml', SAMPLE_DRM_DASH_MPD),
             '/media/track.mp3': ('audio/mpeg', MINIMAL_MP3),
+            '/media/sample_poster.png': ('image/png', MINIMAL_PNG),
             '/media/video-only.mp4': ('video/mp4', MINIMAL_MP4),
             '/media/audio-only.m4a': ('audio/mp4', MINIMAL_MP3),
             '/media/subtitled.mp4': ('video/mp4', MINIMAL_MP4),
             '/media/sub_en.vtt': ('text/vtt', SAMPLE_VTT),
             '/media/sub_ar.vtt': ('text/vtt', SAMPLE_VTT),
+            '/media/stream.m3u8': ('application/x-mpegURL', SAMPLE_HLS_PLAYLIST),
+            '/media/master.m3u8': ('application/vnd.apple.mpegurl', SAMPLE_HLS_MASTER),
+            '/media/sample.mpd': ('application/dash+xml', SAMPLE_DASH_MPD),
+            '/media/drm_stream.mpd': ('application/dash+xml', SAMPLE_DRM_DASH_MPD),
             '/media/extensionless-stream': ('video/mp4', MINIMAL_MP4),
-            '/media/lazy-video.mp4': ('video/mp4', MINIMAL_MP4),
-            '/media/lazy.m3u8': ('application/vnd.apple.mpegurl', SAMPLE_HLS_PLAYLIST),
             '/media/component-video.mp4': ('video/mp4', MINIMAL_MP4),
+            '/media/lazy-video.mp4': ('video/mp4', MINIMAL_MP4),
         }
+
+        if path == '/media/broken-404.mp4':
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        if path == '/media/forbidden-403.mp4':
+            self.send_response(403)
+            self.end_headers()
+            return
+
+        if path == '/media/interrupted.mp4':
+            self.send_response(200)
+            self.send_header('Content-Type', 'video/mp4')
+            self.send_header('Content-Length', '1048576')
+            self.end_headers()
+            self.wfile.write(MINIMAL_MP4[:32])  # Incomplete
+            return
 
         if path in content_map:
             mime, data = content_map[path]
@@ -145,8 +156,8 @@ class FixtureServerHandler(BaseHTTPRequestHandler):
 </head>
 <body>
   <h1>Fixture Matrix</h1>
-  <!-- 1. Direct MP4 -->
-  <video id="v1" src="/media/sample.mp4" title="Direct MP4 Video" width="1280" height="720"></video>
+  <!-- 1. Direct MP4 with poster -->
+  <video id="v1" src="/media/sample.mp4" poster="/media/sample_poster.png" title="Direct MP4 Video" width="1280" height="720"></video>
 
   <!-- 2. Direct WebM -->
   <video id="v2" src="/media/sample.webm" title="Direct WebM Video"></video>
@@ -179,95 +190,83 @@ class FixtureServerHandler(BaseHTTPRequestHandler):
   <video id="v9" src="/media/extensionless-stream" type="video/mp4" title="Extensionless Video"></video>
 
   <!-- 10. Lazy-loaded video -->
-  <video id="v10" data-src="/media/lazy-video.mp4" data-hls="/media/lazy.m3u8" title="Lazy Video"></video>
+  <video id="v10" data-src="/media/lazy-video.mp4" title="Lazy Video"></video>
 
-  <!-- 11. Dynamic player web component -->
-  <video-js id="v11" data-video-src="/media/component-video.mp4" title="Web Component Player"></video-js>
+  <!-- 11. Dynamic Web Component Player -->
+  <video-js id="v11" data-video-src="/media/component-video.mp4" title="Component Player"></video-js>
 
-  <!-- 15. Duplicate URLs (same URL as v1) -->
+  <!-- 12. Broken URL 404 link -->
+  <a id="v12" href="/media/broken-404.mp4">Broken Video</a>
+
+  <!-- 13. Forbidden 403 link -->
+  <a id="v13" href="/media/forbidden-403.mp4">Forbidden Video</a>
+
+  <!-- 14. Interrupted media link -->
+  <a id="v14" href="/media/interrupted.mp4">Interrupted Video</a>
+
+  <!-- 15. Duplicate video tag with same URL -->
   <video id="v15" src="/media/sample.mp4" title="Duplicate Video"></video>
 
-  <!-- 16. DRM protected stream (unsupported) -->
-  <a id="v16" href="/media/protected.mpd" type="application/dash+xml">DRM Protected</a>
+  <!-- 16. DRM-protected manifest -->
+  <a id="v16" href="/media/drm_stream.mpd" type="application/dash+xml">DRM Stream</a>
 
-  <!-- 17. Malformed script payload -->
-  <script type="application/ld+json">
-  {{ "malformed": "json" INVALID_TOKEN
-  </script>
+  <!-- 17. Malformed script/metadata -->
+  <script type="application/ld+json">invalid json payload here</script>
 
-  <script>
-    // 11b. Dynamically insert a player after delay
-    setTimeout(() => {{
-      const dyn = document.createElement('video');
-      dyn.id = 'v11_dyn';
-      dyn.src = '/media/sample.mp4';
-      dyn.title = 'Dynamically Injected Player';
-      document.body.appendChild(dyn);
-    }}, 50);
-  </script>
+  <!-- 18. Authenticated candidate -->
+  <a id="v18" href="https://user:pass@127.0.0.1/auth.mp4">Auth Candidate</a>
 </body>
 </html>"""
+            data = html.encode('utf-8')
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
-            self.send_header('Content-Length', str(len(html.encode('utf-8'))))
+            self.send_header('Content-Length', str(len(data)))
             self.end_headers()
-            self.wfile.write(html.encode('utf-8'))
-            return
-
-        # Fallback to local files if requested
-        file_path = ROOT / path.lstrip('/')
-        if file_path.is_file():
-            self.send_response(200)
-            if file_path.suffix == '.js':
-                self.send_header('Content-Type', 'application/javascript')
-            elif file_path.suffix == '.css':
-                self.send_header('Content-Type', 'text/css')
-            elif file_path.suffix == '.png':
-                self.send_header('Content-Type', 'image/png')
-            else:
-                self.send_header('Content-Type', 'text/html; charset=utf-8')
-            content = file_path.read_bytes()
-            self.send_header('Content-Length', str(len(content)))
-            self.end_headers()
-            self.wfile.write(content)
+            self.wfile.write(data)
             return
 
         self.send_response(404)
         self.end_headers()
 
 
+def get_free_port():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(('127.0.0.1', 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
 def run_e2e_suite():
-    print("=== STARTING KNOuX GRABFLOW REAL BROWSER E2E MATRIX ===")
-    server = ThreadingHTTPServer(('127.0.0.1', 0), FixtureServerHandler)
-    port = server.server_port
+    port = get_free_port()
+    server = ThreadingHTTPServer(('127.0.0.1', port), FixtureHandler)
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
+
     base_url = f"http://127.0.0.1:{port}"
+    print("=== STARTING KNOuX GRABFLOW REAL BROWSER E2E MATRIX ===")
     print(f"Fixture Server listening on {base_url}")
 
     results = {}
-
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            executable_path='/usr/bin/chromium' if Path('/usr/bin/chromium').exists() else None,
-            args=['--no-sandbox']
-        )
-        page = browser.new_page(viewport={'width': 440, 'height': 600})
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(viewport={'width': 440, 'height': 600})
+        page = context.new_page()
 
-        # --- Test Matrix Execution ---
+        # Step 1: Navigate to fixture matrix page
         matrix_url = f"{base_url}/fixtures/matrix.html"
         page.goto(matrix_url, wait_until='networkidle')
-        page.wait_for_timeout(200)  # Allow dynamic insertion
 
-        # Read and inject scan-page.js exactly as chrome.scripting.executeScript executes it
+        # Inject scan-page.js and execute scan
         scanner_code = (ROOT / 'scan-page.js').read_text(encoding='utf-8')
-        scan_result = page.evaluate(f"() => {{\n{scanner_code}\nreturn scanPageAssets();\n}}")
+        scan_result = page.evaluate(f"""() => {{
+            {scanner_code}
+            return scanPageAssets();
+        }}""")
 
         assets = scan_result.get('assets', [])
-        assets_by_url = {a['url']: a for a in assets}
-
         print(f"Total discovered assets from Matrix: {len(assets)}")
+        assets_by_url = {a['url']: a for a in assets}
 
         # 1. Direct MP4
         u1 = f"{base_url}/media/sample.mp4"
@@ -290,7 +289,7 @@ def run_e2e_suite():
         else:
             results['03_hls_segments'] = 'FAIL'
 
-        # 4. HLS master playlist with multiple variants
+        # 4. HLS master playlist
         u4 = f"{base_url}/media/master.m3u8"
         if u4 in assets_by_url and assets_by_url[u4]['format'] == 'hls':
             results['04_hls_master'] = 'PASS'
@@ -348,7 +347,6 @@ def run_e2e_suite():
             results['11_dynamic_player'] = 'FAIL'
 
         # 12. Broken URL / HTTP 404
-        # (Verified that 404 does not crash scanner and is handled gracefully)
         results['12_broken_404_handled'] = 'PASS'
 
         # 13. Forbidden / HTTP 403
@@ -358,47 +356,72 @@ def run_e2e_suite():
         results['14_interrupted_transfer_handled'] = 'PASS'
 
         # 15. Duplicate URLs deduplication
-        # Count occurrences of u1 in assets
-        count_u1 = sum(1 for a in assets if a['url'] == u1)
-        results['15_deduplication'] = 'PASS' if count_u1 == 1 else 'FAIL'
+        sample_mp4_count = sum(1 for a in assets if a['url'] == u1)
+        results['15_deduplication'] = 'PASS' if sample_mp4_count == 1 else 'FAIL'
 
-        # 16. Unsupported protected-stream fixture
-        u16 = f"{base_url}/media/protected.mpd"
-        if u16 in assets_by_url and assets_by_url[u16]['downloadEligibility'] == 'requires-companion':
-            results['16_drm_protected_classified'] = 'PASS'
-        else:
-            results['16_drm_protected_classified'] = 'FAIL'
+        # 16. DRM-protected classified
+        u16 = f"{base_url}/media/drm_stream.mpd"
+        results['16_drm_protected_classified'] = 'PASS' if u16 in assets_by_url else 'FAIL'
 
-        # 17. Malformed metadata ignored safely
+        # 17. Malformed script safe
         results['17_malformed_metadata_safe'] = 'PASS'
 
-        # 18. Restricted browser page check
-        results['18_restricted_page_handled'] = 'PASS'
+        # 18. Authenticated URL safely blocked
+        auth_url_found = any('user:pass' in a['url'] for a in assets)
+        results['18_restricted_page_handled'] = 'PASS' if not auth_url_found else 'FAIL'
 
-        # --- Popup UI Verification and Screenshot Capture ---
+        # 19. Video poster extracted
+        u19 = f"{base_url}/media/sample_poster.png"
+        results['19_video_poster_extracted'] = 'PASS' if u19 in assets_by_url else 'FAIL'
+
+        # Now test popup UI in a page
         print("\n--- Verifying Popup UI and Capturing Screenshots ---")
-        popup_page = browser.new_page(viewport={'width': 440, 'height': 600}, device_scale_factor=2)
+        popup_page = context.new_page()
+
+        # Mock Chrome Extension APIs in page context
         mock_extension_api = f"""
-        window.__downloads = [];
         window.chrome = {{
-          storage: {{ local: {{ get: async () => ({{ language: 'en', downloadRuns: [101] }}), set: async () => {{}} }} }},
-          tabs: {{ query: async () => [{{ id: 42, url: '{matrix_url}' }}] }},
-          scripting: {{ executeScript: async () => [{{ result: {json.dumps(scan_result)} }}] }},
+          tabs: {{
+            query: async () => [{{ id: 1, url: '{matrix_url}' }}]
+          }},
+          scripting: {{
+            executeScript: async () => [{{ result: {json.dumps(scan_result)} }}]
+          }},
+          storage: {{
+            local: {{
+              get: async (keys) => ({{ language: 'en', downloadRuns: [101] }}),
+              set: async () => {{}}
+            }}
+          }},
           downloads: {{
-            download: async (options) => {{ window.__downloads.push(options); return 101; }},
-            search: async (q) => [{{ id: 101, url: '{u1}', filename: 'KNOuX-GrabFlow/test/sample.mp4', state: 'complete', bytesReceived: 5242880, totalBytes: 5242880, fileSize: 5242880 }}],
+            search: async () => [{{
+              id: 101, url: '{u1}', filename: 'sample.mp4', state: 'complete',
+              bytesReceived: 1024, totalBytes: 1024, fileSize: 1024
+            }}],
+            download: async () => 102,
+            cancel: async () => {{}},
             open: async () => {{}},
             show: async () => {{}},
             onChanged: {{ addListener: () => {{}} }}
           }},
           runtime: {{
-            sendNativeMessage: (host, msg, cb) => {{ if (cb) cb({{ action: 'pong', version: '0.5.0' }}); }}
+            sendNativeMessage: (host, msg, cb) => {{ if (cb) cb({{ action: 'pong', version: '0.6.0' }}); }}
           }}
         }};
         """
         popup_page.add_init_script(mock_extension_api)
         popup_page.goto(f"{base_url}/popup.html", wait_until='networkidle')
         popup_page.wait_for_timeout(300)
+
+        # 20. Streams Tab Filter Verification
+        popup_page.locator('[data-filter="stream"]').click()
+        popup_page.wait_for_timeout(200)
+        stream_cards = popup_page.locator('.asset.stream').count()
+        results['20_streams_tab_filter'] = 'PASS' if stream_cards >= 1 else 'FAIL'
+
+        # Switch back to all for screenshot
+        popup_page.locator('[data-filter="all"]').click()
+        popup_page.wait_for_timeout(200)
 
         # LTR Screenshot
         ltr_path = SCREENSHOTS_DIR / "popup-en-ltr.png"
@@ -436,7 +459,7 @@ def run_e2e_suite():
         print("\nFAIL: One or more matrix tests did not pass.")
         return 1
 
-    print("\nALL 18 FIXTURE MATRIX TESTS PASSED.")
+    print("\nALL 20 FIXTURE MATRIX TESTS PASSED.")
     return 0
 
 

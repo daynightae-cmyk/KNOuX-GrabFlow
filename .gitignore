@@ -1,0 +1,6 @@
+node_modules/
+.vscode/
+*.crx
+*.pem
+__pycache__/
+.DS_Store

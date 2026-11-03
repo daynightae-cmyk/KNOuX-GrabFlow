@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict');
-const { filterSortAssets, safeDownloadName, exportAssetsCsv } = require('../asset-utils');
+const { filterSortAssets, safeDownloadName, exportAssetsCsv, isDownloadableAsset, summarizeDownloads } = require('../asset-utils');
 let tests = 0;
 function test(name, fn) { fn(); console.log('PASS',name); tests++; }
 const data = [
@@ -46,5 +46,20 @@ test('manifest imposes least privilege, no remote code or background scanner', (
  assert.equal(m.host_permissions,undefined);
  assert.equal(m.background,undefined);
  assert.ok(!JSON.stringify(m).includes('unsafe-eval'));
+});
+test('stream playlists are copy-only, direct video files are downloadable', () => {
+ assert.equal(isDownloadableAsset({type:'video',format:'hls'}),false);
+ assert.equal(isDownloadableAsset({type:'video',format:'dash'}),false);
+ assert.equal(isDownloadableAsset({type:'video',format:'direct'}),true);
+ assert.equal(isDownloadableAsset({type:'document'}),true);
+});
+test('real download states are reconciled separately from download starts', () => {
+ assert.deepEqual(summarizeDownloads([{state:'complete'},{state:'in_progress'},{state:'interrupted'},null]),
+  {complete:1,running:1,interrupted:1,missing:1});
+});
+test('CSV exports media format for programmatic stream conversion', () => {
+ const csv=exportAssetsCsv([{type:'video',name:'Stream',url:'https://cdn.test/master.m3u8',format:'hls'}]);
+ assert.ok(csv.includes('format'));
+ assert.ok(csv.includes('"hls"'));
 });
 console.log(`${tests} utility/security checks passed`);

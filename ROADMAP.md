@@ -30,3 +30,10 @@
 
 ## Product rules
 Small bundle, no credential harvesting, no DRM bypass, no unapproved hidden requests, no fake PASS or download-complete claims.
+
+### v0.4 next acceptance gates
+
+1. Real Chrome unpacked toolbar click + activeTab grant, screenshots AR/EN RTL/LTR, direct download status including interrupted/403/404. Use a dedicated browser test profile.
+2. Expand controlled video fixture matrix to MP4/WebM, HLS master quality variants, DASH, MIME-only URLs, dynamic player assets, unsupported DRM and browser-internal pages.
+3. Optional Native Messaging helper for one-click HLS/DASH assembly, only with explicit user opt-in and a security audit. Desktop helper is currently manual.
+4. Chrome Web Store legal/metadata/privacy review and submission — **not started**.

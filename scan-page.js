@@ -16,6 +16,18 @@ function scanPageAssets() {
     document: /\.(?:pdf|docx?|xlsx?|pptx?|txt|csv|epub|zip|rar|7z|json|md)(?:[?#]|$)/i
   };
   const validTypes = Object.keys(extensions);
+  // A playlist is a recipe for many segments, not a downloadable complete video.
+  function videoFormat(value, mime = '') {
+    const v = String(value || '');
+    const m = String(mime || '').toLowerCase();
+    if (/\.m3u8(?:[?#]|$)/i.test(v) || /(?:vnd\.apple\.mpegurl|x-mpegurl)/.test(m)) return 'hls';
+    if (/\.mpd(?:[?#]|$)/i.test(v) || m.includes('dash+xml')) return 'dash';
+    return 'direct';
+  }
+  function classifyVideo(value, mime = '') {
+    if (videoFormat(value, mime) !== 'direct') return true;
+    return extensions.video.test(String(value || '')) || /^(?:video\/(?:mp4|webm|ogg|quicktime|x-m4v))\b/i.test(String(mime || ''));
+  }
   function safeUrl(value) {
     if (typeof value !== 'string' || !value.trim()) return null;
     try {
@@ -24,7 +36,7 @@ function scanPageAssets() {
       return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password ? u.href : null;
     } catch (_) { return null; }
   }
-  function add(type, candidate, label, source = 'dom', width = 0, height = 0) {
+  function add(type, candidate, label, source = 'dom', width = 0, height = 0, mime = '') {
     if (assets.length >= LIMIT || !validTypes.includes(type) || (blockedVideo && type === 'video')) return;
     const url = safeUrl(candidate);
     if (!url) return;
@@ -40,6 +52,7 @@ function scanPageAssets() {
     }
     seen.set(url, assets.length);
     assets.push({type, url, name: (name || `${type} asset`).slice(0, 140), source,
+      ...(type === 'video' ? {format: videoFormat(url, mime)} : {}),
       width: Number.isFinite(width) && width > 0 ? Math.trunc(width) : 0,
       height: Number.isFinite(height) && height > 0 ? Math.trunc(height) : 0});
   }
@@ -78,11 +91,14 @@ function scanPageAssets() {
   }
   if (!blockedVideo) {
     for (const video of document.querySelectorAll('video')) {
-      add('video', firstHttp(video.currentSrc, video.getAttribute('src'), video.getAttribute('data-src')),
-        video.getAttribute('title') || video.getAttribute('aria-label'), 'video');
+      const src = firstHttp(video.currentSrc, video.getAttribute('src'), video.getAttribute('data-src'),
+        video.getAttribute('data-hls'), video.getAttribute('data-video-src'));
+      if (src) add('video', src, video.getAttribute('title') || video.getAttribute('aria-label'), 'video', 0, 0,
+        video.getAttribute('type') || '');
       for (const source of video.querySelectorAll('source[src],source[data-src]')) {
-        add('video', firstHttp(source.getAttribute('src'), source.getAttribute('data-src')),
-          video.getAttribute('title'), 'video');
+        const src = firstHttp(source.getAttribute('src'), source.getAttribute('data-src'));
+        if (src && classifyVideo(src, source.getAttribute('type'))) add('video', src,
+          video.getAttribute('title'), 'video', 0, 0, source.getAttribute('type'));
       }
     }
   }
@@ -99,7 +115,7 @@ function scanPageAssets() {
     const tag = meta.getAttribute('property') || meta.getAttribute('name') || '';
     const value = meta.getAttribute('content');
     const type = tag.includes('image') ? 'image' : tag.includes('audio') ? 'audio' : 'video';
-    if (value && extensions[type].test(value)) add(type, value, '', 'meta');
+    if (value && (type === 'video' ? classifyVideo(value) : extensions[type].test(value))) add(type, value, '', 'meta');
   }
   // Deliberately bounded scan of *inline* CSS. Never fetch stylesheets.
   let sampled = 0;
@@ -114,9 +130,46 @@ function scanPageAssets() {
     if (!url) continue;
     const name = link.getAttribute('download') || link.getAttribute('aria-label') || link.textContent;
     for (const type of validTypes) {
-      if (extensions[type].test(url)) { add(type, url, name, 'link'); break; }
+      if (type === 'video' ? classifyVideo(url, link.getAttribute('type')) : extensions[type].test(url)) {
+        add(type, url, name, 'link', 0, 0, link.getAttribute('type')); break;
+      }
     }
     if (assets.length >= LIMIT) break;
+  }
+  // Video-first: read public Resource Timing *names* from the current page only.
+  // Do NOT fetch or intercept network traffic and do NOT collect streaming segments.
+  if (!blockedVideo && typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function') {
+    let checked = 0;
+    for (const entry of performance.getEntriesByType('resource')) {
+      if (++checked > 1200 || assets.length >= LIMIT) break;
+      if (typeof entry.name === 'string' && classifyVideo(entry.name)) {
+        add('video', entry.name, '', 'resource-timing');
+      }
+    }
+  }
+  // VideoObject often exposes a legitimate direct contentUrl without a <video> tag.
+  if (!blockedVideo) {
+    let checked = 0;
+    function visit(value, depth = 0) {
+      if (!value || depth > 5 || assets.length >= LIMIT) return;
+      if (Array.isArray(value)) { for (const x of value.slice(0, 40)) visit(x, depth + 1); return; }
+      if (typeof value !== 'object') return;
+      const typ = value['@type'];
+      if (typ === 'VideoObject' || (Array.isArray(typ) && typ.includes('VideoObject'))) {
+        const content = value.contentUrl;
+        const mime = value.encodingFormat || '';
+        if (typeof content === 'string' && classifyVideo(content, mime)) {
+          add('video', content, value.name || '', 'structured-data', 0, 0, mime);
+        }
+      }
+      for (const k of ['@graph', 'mainEntity', 'video', 'itemListElement']) if (value[k]) visit(value[k], depth + 1);
+    }
+    for (const script of document.querySelectorAll('script[type="application/ld+json"]')) {
+      if (++checked > 20 || assets.length >= LIMIT) break;
+      const raw = script.textContent || '';
+      if (raw.length > 131072) continue;
+      try { visit(JSON.parse(raw)); } catch (_) { /* untrusted or invalid metadata */ }
+    }
   }
   return {
     title: String(document.title || '').slice(0, 150),

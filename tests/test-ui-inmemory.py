@@ -22,12 +22,14 @@ window.chrome = {
     title:'Portfolio',domain:'example.com',pageUrl:'https://example.com/work',truncated:false,assets:[
       {type:'image',url:'https://assets.example.com/hero.webp',name:'Hero',width:2100,height:1200,source:'image'},
       {type:'image',url:'https://assets.example.com/logo.png',name:'Logo',width:200,height:200,source:'image'},
-      {type:'video',url:'https://assets.example.com/showreel.mp4',name:'Showreel',source:'video'},
+      {type:'video',url:'https://assets.example.com/showreel.mp4',name:'Showreel',source:'video',format:'direct'},
+      {type:'video',url:'https://assets.example.com/playlist.m3u8',name:'Stream playlist',source:'resource-timing',format:'hls'},
       {type:'audio',url:'https://assets.example.com/podcast.mp3',name:'Podcast',source:'audio'},
       {type:'document',url:'https://assets.example.com/manual.pdf',name:'Manual',source:'link'}
     ]
   }}]},
-  downloads:{download:async(data)=>{window.__downloads.push(data);return window.__downloads.length;}}
+  downloads:{download:async(data)=>{window.__downloads.push(data);return window.__downloads.length;},
+    search:async({id}) => [{id,state:'complete'}],onChanged:{addListener:()=>{}}}
 };
 '''
 with sync_playwright() as p:
@@ -41,13 +43,19 @@ with sync_playwright() as p:
     for js in ('asset-utils.js','scan-page.js','popup.js'):
         page.add_script_tag(content=(ROOT/js).read_text())
     page.locator('.asset').first.wait_for()
-    assert page.locator('.asset').count()==5
-    assert page.locator('#totalCount').inner_text()=='05'
+    assert page.locator('.asset').count()==6
+    assert page.locator('#totalCount').inner_text()=='06'
     page.locator('#largeImages').check()
-    assert page.locator('.asset').count()==4
+    assert page.locator('.asset').count()==5
     page.locator('#largeImages').uncheck()
     page.locator('#sortMode').select_option('name')
     assert page.locator('.asset-name').first.inner_text()=='Hero'
+    page.locator('[data-filter="video"]').click()
+    assert page.locator('.asset').count()==2
+    assert page.locator('.asset.stream').count()==1
+    page.locator('.asset.stream input').check()
+    assert page.locator('#downloadBtn').is_disabled()
+    page.locator('#clearSelection').click()
     page.locator('[data-filter="audio"]').click()
     assert page.locator('.asset').count()==1
     page.locator('[data-filter="image"]').click()
@@ -64,6 +72,8 @@ with sync_playwright() as p:
     assert page.evaluate('window.__downloads[0].filename') == 'KNOuX-GrabFlow/example.com/hero.webp'
     page.locator('#langBtn').click()
     assert page.locator('html').get_attribute('dir')=='rtl'
+    assert page.locator('#downloadStatus').is_visible()
+    assert '1 ' in page.locator('#downloadStatus').inner_text()
     assert page.locator('#downloadBtn').get_by_text('تحميل المحدد').count()==1
     page.locator('#langBtn').click()
     page.screenshot(path=str(ROOT.parent/'KNOuX-GrabFlow-v0.3.0-preview.png'),full_page=True)

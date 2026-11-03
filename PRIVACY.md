@@ -29,3 +29,7 @@ This is a source-based draft. Before any public Chrome Web Store submission, the
 ### v0.3.0 — Audio and image-source handling
 
 On user-triggered scanning, the extension also reads explicitly present audio URLs, responsive `<picture>` sources and social-preview image references from the selected page's DOM. It does **not** play media, fetch separate stylesheets, capture network requests, run a background scanner or transmit extracted results to KNOuX servers. The existing local-only controls and storage limitations remain unchanged.
+
+### v0.4 update: recent download status
+
+When the user starts a download, GrabFlow stores up to 30 Chrome-generated download **IDs** in `chrome.storage.local` under `downloadRuns`. When the popup opens, those IDs are looked up locally using `chrome.downloads.search` to display real completed/running/interrupted counts. No new website permissions are added. GrabFlow does not collect browsing history, upload media URLs, or send telemetry to KNOUX servers.

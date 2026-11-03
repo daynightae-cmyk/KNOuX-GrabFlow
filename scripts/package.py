@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Deterministic, reviewable Chrome Web Store zip — standard library only."""
 from pathlib import Path
-from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
+from zipfile import ZipFile, ZipInfo, ZIP_STORED
 import json
 import sys
 
@@ -15,14 +15,15 @@ for name in FILES:
     if not (ROOT/name).is_file() or (ROOT/name).is_symlink():
         sys.exit(f'Missing/unsafe: {name}')
 OUT=ROOT.parent/f"KNOuX-GrabFlow-CHROME-v{MANIFEST['version']}.zip"
-with ZipFile(OUT,'w',ZIP_DEFLATED,compresslevel=9) as archive:
+with ZipFile(OUT,'w',ZIP_STORED) as archive:
     for name in FILES:
-        info=ZipInfo(name,(2026,1,1,0,0,0));info.compress_type=ZIP_DEFLATED
+        info=ZipInfo(name,(2026,1,1,0,0,0));info.compress_type=ZIP_STORED
+        info.create_system=3 # fixed POSIX metadata across Windows/Linux
         info.external_attr=0o644 << 16
         data=(ROOT/name).read_bytes()
         if name.endswith(('.html','.css','.js','.json')):
             data=data.replace(b'\r\n',b'\n') # canonical text payloads across platforms
-        archive.writestr(info,data,compress_type=ZIP_DEFLATED,compresslevel=9)
+        archive.writestr(info,data,compress_type=ZIP_STORED)
 with ZipFile(OUT) as archive:
     if archive.testzip() is not None: sys.exit('Archive CRC error')
     if sorted(archive.namelist()) != sorted(FILES): sys.exit('Unexpected release file set')

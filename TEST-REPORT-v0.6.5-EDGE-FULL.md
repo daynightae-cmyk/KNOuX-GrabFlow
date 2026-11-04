@@ -1,4 +1,4 @@
-# KNOuX GrabFlow v0.6.4 — Test Report (Full Edition, Microsoft Edge)
+# KNOuX GrabFlow v0.6.5 — Test Report (Full Edition, Microsoft Edge)
 
 Executed on the development device on 2026-11-04. Every number below is copied from command
 output, not restated from a plan. Nothing in this report is a claim about the store, and no
@@ -11,7 +11,8 @@ Two builds of this work exist and must not be confused:
 | Build | Source | Manifest | Artifact SHA-256 | Status |
 |---|---|---|---|---|
 | Engineering build | merged as `dc7b0fd` | 0.6.3 | `b8aa2aad20eb61a023a72b2c310a4a157f612d63d14bd0b6c0171b7e1b3cdb5c` (164 471 B) | merged; superseded |
-| This report | `release/grabflow-v0.6.3-closure` | **0.6.4** | recorded in the Packaging section below | release candidate |
+| First closure build | merged as `4a54385` | 0.6.4 | `6e9a2b7c…082bf26` (165 445 B) | superseded before publication |
+| This report | `fix/grabflow-v0.6.4-bootstrap-catch` | **0.6.5** | recorded in the Packaging section below | release candidate |
 
 An earlier report also referenced `b855ee03faadef818b86f86c198a60f8fef0e5ccb917226b6b8e467e12fdfccd`
 (163 547 B). That was an interim build produced before the last round of Sonar-driven source
@@ -192,15 +193,15 @@ asset, so the assembled file was written as **`master.m3u8.mp4`**. The playlist 
 dropped before the media suffix, and `tests/test-companion-host.py` covers it - the rerun produced
 `master.mp4`.
 
-## Packaging (v0.6.4 release candidate)
+## Packaging (v0.6.5 release candidate)
 
 `python scripts/package.py`:
 
 ```
-PACKAGED D:\KNOUX-Workspace\KNOuX-GrabFlow-CHROME-v0.6.4.zip (165445 bytes, 12 files)
-PACKAGED D:\KNOUX-Workspace\KNOuX-GrabFlow-EDGE-v0.6.4.zip   (165445 bytes, 12 files)
-VERIFIED KNOuX-GrabFlow-CHROME-v0.6.4.zip 6e9a2b7c99681a39a23e44961c454a6cb77f8b7ace24af8f20d620aea082bf26
-VERIFIED KNOuX-GrabFlow-EDGE-v0.6.4.zip   6e9a2b7c99681a39a23e44961c454a6cb77f8b7ace24af8f20d620aea082bf26
+PACKAGED D:\KNOUX-Workspace\KNOuX-GrabFlow-CHROME-v0.6.5.zip (165732 bytes, 12 files)
+PACKAGED D:\KNOUX-Workspace\KNOuX-GrabFlow-EDGE-v0.6.5.zip   (165732 bytes, 12 files)
+VERIFIED KNOuX-GrabFlow-CHROME-v0.6.5.zip a56c6918617f7268523172634f18d56aeb05fb1b904020ba0d2b715632732a3a
+VERIFIED KNOuX-GrabFlow-EDGE-v0.6.5.zip   a56c6918617f7268523172634f18d56aeb05fb1b904020ba0d2b715632732a3a
 ```
 
 The two archives are byte-identical because both browsers consume the same Manifest V3 payload;
@@ -222,9 +223,9 @@ Artifact audit performed on the Edge zip:
 | Secrets, `.env`, `.pem`, `node_modules`, `.git/`, machine paths | none present |
 | Corresponds to the tested source SHA | the closure commit that produced it; see the final delivery |
 
-`RELEASE_CHECKSUMS-v0.6.4.sha256` records both digests and the script re-reads and re-verifies it
-before exiting. `RELEASE_CHECKSUMS-v0.6.3.sha256` is left in place as the record of the superseded
-merged build.
+`RELEASE_CHECKSUMS-v0.6.5.sha256` records both digests and the script re-reads and re-verifies it
+before exiting. `RELEASE_CHECKSUMS-v0.6.3.sha256` and `-v0.6.4.sha256` are left in place as the record of
+superseded builds.
 
 ## Defects found and fixed during this testing
 

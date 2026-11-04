@@ -1058,4 +1058,10 @@ chrome.runtime.onMessage?.addListener(message => {
     renderCompanion();
     render();
   }
-})();
+})().catch(() => {
+  // Startup runs as one async unit. Without this handler a failure outside the
+  // storage try-block would leave the popup half-rendered with no explanation,
+  // and the rejection would be invisible to the user.
+  empty(t('scanFail'));
+  notice(t('scanFail'), true);
+});

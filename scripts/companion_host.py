@@ -40,7 +40,7 @@ import threading
 import time
 from urllib.parse import urljoin, urlsplit
 
-VERSION = "0.6.4"
+VERSION = "0.6.5"
 HOST_NAME = "com.knoux.grabflow.companion"
 
 # --- Hard ceilings. Every one of these is enforced, not advisory. -----------

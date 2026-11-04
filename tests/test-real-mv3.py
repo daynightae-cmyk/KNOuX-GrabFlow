@@ -49,6 +49,29 @@ def run():
             "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "+faststart",
             str(video_fixture)
         ], check=True, capture_output=True, timeout=45)
+        # Additional deterministic local rows used only for the populated
+        # bilingual screenshots. No browser API is mocked.
+        (fixtures / "stream.m3u8").write_text(
+            "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n"
+            "#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:2.0,\nsegment0.ts\n#EXT-X-ENDLIST\n",
+            encoding="utf-8",
+        )
+        (fixtures / "manifest.mpd").write_text(
+            '<?xml version="1.0" encoding="utf-8"?>'
+            '<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" mediaPresentationDuration="PT2S" '
+            'minBufferTime="PT1S" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011">'
+            '<Period><AdaptationSet mimeType="video/mp4" segmentAlignment="true">'
+            '<Representation id="v0" bandwidth="128000" width="160" height="90" '
+            'codecs="avc1.42E01E"><BaseURL>test-video.mp4</BaseURL>'
+            '</Representation></AdaptationSet></Period></MPD>',
+            encoding="utf-8",
+        )
+        subprocess.run([
+            ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
+            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100",
+            "-t", "1", "-c:a", "pcm_s16le", str(fixtures / "audio.wav")
+        ], check=True, capture_output=True, timeout=30)
+        (fixtures / "notes.txt").write_text("KNOuX GrabFlow local fixture\n", encoding="utf-8")
         server = ThreadingHTTPServer(
             ("127.0.0.1", 0),
             partial(QuietFixtureHandler, directory=str(fixtures)),
@@ -106,11 +129,9 @@ def run():
                     popup.locator("#totalCount").wait_for(timeout=15000)
                     popup.locator("#langBtn").click()
                     assert popup.locator("html").get_attribute("dir") == "rtl"
-                    SCREENSHOTS.mkdir(parents=True, exist_ok=True)
-                    popup.screenshot(path=str(SCREENSHOTS / "real-mv3-ar-rtl.png"))
                     popup.locator("#langBtn").click()
                     assert popup.locator("html").get_attribute("dir") == "ltr"
-                    popup.screenshot(path=str(SCREENSHOTS / "real-mv3-popup.png"))
+                    SCREENSHOTS.mkdir(parents=True, exist_ok=True)
 
                     # Exercise the actual extension UI and Chrome Downloads API.
                     # Only the discovery result is seeded with a deterministic
@@ -197,6 +218,37 @@ def run():
                     assert 1.7 < float(media_info["format"]["duration"]) < 2.4
                     video_digest = hashlib.sha256(saved_video.read_bytes()).hexdigest()
                     popup.screenshot(path=str(SCREENSHOTS / "real-mv3-download-complete.png"))
+                    # Populated bilingual captures: deterministic local rows are
+                    # seeded through the shipped applyScannedPage path; the popup,
+                    # rendering, language switch and download state are real.
+                    popup.evaluate("""({imageUrl, videoUrl, hlsUrl, dashUrl, audioUrl, docUrl}) => applyScannedPage({
+                        title: 'KNOuX GrabFlow local fixture',
+                        domain: '127.0.0.1',
+                        pageUrl: hlsUrl,
+                        assets: [
+                            {type:'video', url:hlsUrl, name:'master.m3u8', format:'hls', source:'local-fixture'},
+                            {type:'video', url:dashUrl, name:'manifest.mpd', format:'dash', source:'local-fixture'},
+                            {type:'video', url:videoUrl, name:'test-video.mp4', format:'mp4', resolution:'160x90', source:'local-fixture'},
+                            {type:'image', url:imageUrl, name:'icon128.png', width:128, height:128, source:'local-fixture'},
+                            {type:'audio', url:audioUrl, name:'audio.wav', format:'wav', source:'local-fixture'},
+                            {type:'document', url:docUrl, name:'notes.txt', source:'local-fixture'}
+                        ],
+                        truncated: false
+                    })""", {
+                        "imageUrl": media_url,
+                        "videoUrl": video_url,
+                        "hlsUrl": f"http://127.0.0.1:{server.server_port}/stream.m3u8",
+                        "dashUrl": f"http://127.0.0.1:{server.server_port}/manifest.mpd",
+                        "audioUrl": f"http://127.0.0.1:{server.server_port}/audio.wav",
+                        "docUrl": f"http://127.0.0.1:{server.server_port}/notes.txt",
+                    })
+                    popup.wait_for_timeout(400)
+                    popup.locator("#langBtn").click()
+                    assert popup.locator("html").get_attribute("dir") == "rtl"
+                    popup.screenshot(path=str(SCREENSHOTS / "real-mv3-ar-rtl.png"))
+                    popup.locator("#langBtn").click()
+                    assert popup.locator("html").get_attribute("dir") == "ltr"
+                    popup.screenshot(path=str(SCREENSHOTS / "real-mv3-popup.png"))
                     assert not errors, f"Popup errors: {errors}"
                     print(f"REAL_MV3_UNPACKED_PASS: {extension_id}")
                     print(f"REAL_CHROME_DOWNLOAD_COMPLETE: {len(actual_bytes)} bytes SHA256={checksum}")

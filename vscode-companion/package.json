@@ -1,9 +1,29 @@
 {
   "name": "knoux-grabflow-vscode",
-  "displayName": "KNOuX GrabFlow — Media Companion",
-  "description": "Inspect streaming manifests (HLS/DASH), generate FFmpeg assembly commands, and invoke KNOuX GrabFlow desktop companion directly from VS Code.",
-  "version": "0.6.0",
+  "displayName": "KNOuX GrabFlow - Media Companion",
+  "description": "Inspect HLS/DASH manifests, generate safe FFmpeg commands, and run local GrabFlow stream assembly from VS Code.",
+  "version": "0.6.7",
   "publisher": "knoux-labs",
+  "license": "SEE LICENSE IN LICENSE.txt",
+  "icon": "media/icon.png",
+  "homepage": "https://github.com/daynightae-cmyk",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/daynightae-cmyk/KNOuX-GrabFlow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/daynightae-cmyk"
+  },
+  "keywords": [
+    "media",
+    "video",
+    "hls",
+    "dash",
+    "ffmpeg",
+    "ffprobe",
+    "stream",
+    "grabflow"
+  ],
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -15,6 +35,21 @@
     "onCommand:knouxGrabflow.inspectMedia",
     "onCommand:knouxGrabflow.assembleStream",
     "onCommand:knouxGrabflow.generateFfmpegCommand"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "The companion runs a local Python helper and local FFmpeg/FFprobe against user-supplied URLs."
+    }
+  },
+  "files": [
+    "extension.js",
+    "companion/assemble_stream.py",
+    "companion/companion_host.py",
+    "media/icon.png",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE.txt"
   ],
   "contributes": {
     "commands": [
@@ -40,17 +75,22 @@
         "knouxGrabflow.ffmpegPath": {
           "type": "string",
           "default": "ffmpeg",
-          "description": "Absolute path to local FFmpeg executable."
+          "description": "Absolute path to local FFmpeg, or a bare name resolved to an absolute path. The child process never inherits the caller's PATH."
         },
         "knouxGrabflow.ffprobePath": {
           "type": "string",
           "default": "ffprobe",
-          "description": "Absolute path to local FFprobe. A bare name is resolved to an absolute path before use; the child process never inherits the caller's PATH."
+          "description": "Absolute path to local FFprobe, or a bare name resolved to an absolute path. The child process never inherits the caller's PATH."
         },
         "knouxGrabflow.pythonPath": {
           "type": "string",
           "default": "",
           "description": "Absolute path to the Python interpreter used for companion assembly. Leave empty to use an auto-detected absolute path; a bare name is never resolved through an inherited PATH."
+        },
+        "knouxGrabflow.companionScriptPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to assemble_stream.py. Leave empty to use the script bundled in the extension, then the repository checkout."
         }
       }
     }

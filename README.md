@@ -1,4 +1,4 @@
-# KNOuX GrabFlow™ — Full Edition (v0.6.3)
+# KNOuX GrabFlow™ — Full Edition (v0.6.4)
 
 **Intelligent Video & Web Asset Discovery. Private by design. Beautifully engineered.**
 
@@ -6,14 +6,14 @@ An independent KNOuX LABS browser extension for Microsoft Edge and Chrome: disco
 save accessible video files, adaptive stream playlists, audio, images and downloadable documents.
 Bilingual English/Arabic (RTL), local-only, zero telemetry, no hosted backend.
 
-> **Read `RELEASE_NOTES-v0.6.3.md` and `TEST-REPORT-v0.6.3-EDGE-FULL.md` first.** The sections
+> **Read `RELEASE_NOTES-v0.6.4.md` and `TEST-REPORT-v0.6.4-EDGE-FULL.md` first.** The sections
 > below describe the v0.6.0–v0.6.1 baseline and several of their statements are now superseded —
 > in particular "native assembly cancellation is disabled" (it works now), "one-shot request;
 > continuous progress not verified" (progress streams and is tested), and the violet-only
 > "Obsidian Glass 2.0" palette (the identity is now the cyan → violet neon of the orb mark).
 > This is an engineering build with real Edge 156 evidence, not a store-approved release.
 
-## What v0.6.3 adds
+## What the v0.6.3 work added (shipped as v0.6.4)
 
 | Area | Before | Now |
 |---|---|---|
@@ -26,6 +26,7 @@ Bilingual English/Arabic (RTL), local-only, zero telemetry, no hosted backend.
 | Stream metadata | guessed from file names | `probe` (implemented since v0.5, never wired) shows real duration/bitrate/tracks/DRM flag |
 | Edge companion | registered under the Chrome hive only — unreachable in Edge | registers Chrome **and** Edge hives |
 | Edge QA | Chromium only; "could not complete Load unpacked runtime" | `tests/test-edge-runtime.py` passes 9 steps on Edge 156.0.4314.58 |
+| Edge native path | companion registered under the Chrome hive only | `tests/test-edge-native-e2e.py` proves Edge → host → FFmpeg → playable file |
 | Detection | DOM + resource timing at Chrome's ~250-entry default buffer | buffer raised to 3000, `initiatorType` recorded, `link rel=preload` / `object` / `embed` added |
 | Identity | violet-only palette, placeholder stag icon | tokens in three layers, icons derived from the supplied orb mark |
 
@@ -66,7 +67,7 @@ standing in for.
   - Companion installer scripts require the exact installed Chrome extension ID; wildcard registration is not permitted.
 - **VS Code Media Companion Extension (`vscode-companion/`):**
   - Developer extension to inspect media URLs, validate HLS/DASH manifests, and trigger GrabFlow stream assembly from VS Code.
-- **GrabFlow Neon Design System (v0.6.3):**
+- **GrabFlow Neon Design System:**
   - Orb mark derived from the supplied logo by `scripts/build-icons.py`; pulsing cyan/violet ambient lighting.
   - Three token layers — primitive, semantic, component — with the signature gradient
     `#22D3EE → #8B5CF6 → #E879F9` on a deep indigo field. Rules reference tokens, never raw hex.

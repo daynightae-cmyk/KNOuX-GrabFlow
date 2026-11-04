@@ -168,7 +168,6 @@ def run():
                     "--no-first-run", "--no-default-browser-check",
                 ],
             )
-            failures = []
             try:
                 # ---- 1. the extension really loaded in Edge -----------------
                 # edge://extensions renders no usable DOM under headless Edge, so
@@ -201,6 +200,11 @@ def run():
                 popup.goto(f"chrome-extension://{extension_id}/popup.html",
                            wait_until="domcontentloaded")
                 popup.locator("#langBtn").wait_for(timeout=20000)
+                # The element exists before popup.js has attached its listeners, and a
+                # click landing in that window is silently lost. Wait for the script.
+                popup.wait_for_function(
+                    "() => typeof state !== 'undefined' && typeof translate === 'function'",
+                    timeout=20000)
                 worker_reply = popup.evaluate("""async () => {
                     const reply = await chrome.runtime.sendMessage({type: 'jobs:list'});
                     const manifest = chrome.runtime.getManifest();
@@ -445,22 +449,20 @@ def run():
                 print("NOT VERIFIED here: physical toolbar click, native messaging handshake "
                       "(see tests/test-real-native-messaging-win.py and "
                       "tests/test-companion-protocol.py)")
-            except Exception as exc:  # noqa: BLE001 - recorded, then turned into exit 1
-                # Catching AssertionError specifically would make every assert in
-                # this block silently contribute to a list instead of failing loudly
-                # at its own line. Any exception is recorded with its type and the
-                # suite still exits non-zero below.
-                failures.append(f"{type(exc).__name__}: {exc}")
+            except Exception as exc:  # noqa: BLE001 - evidence, then re-raised
+                # Recording failures into a list hid the traceback that made them
+                # diagnosable, and asserting inside a handler that catches
+                # AssertionError is the pattern the static gate flags. Capture the
+                # screenshot, then let the original exception propagate.
                 try:
                     SCREENSHOTS.mkdir(parents=True, exist_ok=True)
                     context.new_page().screenshot(path=str(SCREENSHOTS / "edge-failure.png"))
-                except Exception:
+                except Exception:  # noqa: BLE001 - evidence capture is best effort
                     pass
-                print("\nEDGE_RUNTIME_FAIL: " + str(exc))
+                print(f"\nEDGE_RUNTIME_FAIL: {type(exc).__name__}: {exc}")
+                raise
             finally:
                 context.close()
-            if failures:
-                return 1
             return 0
 
 

@@ -31,7 +31,7 @@ and through `apt` in CI.
 |---|---|
 | `node --check` popup.js / scan-page.js / asset-utils.js / background.js / vscode-companion | 5/5 OK |
 | `tests/test-scanner.cjs` | **36 checks passed** (was 30; 6 new) |
-| `tests/test-utilities.cjs` | **18 checks passed** (was 17; 1 new) |
+| `tests/test-utilities.cjs` | **19 checks passed** (was 17; 2 new) |
 | `tests/test-vscode-companion.cjs` | 2 passed |
 | `tests/test-companion-host.py` | Ran 8 — OK |
 | `tests/test-native-boundary.py` | Ran 10 — OK |
@@ -62,6 +62,8 @@ cancellation are observable mid-flight.
 [11] NESTED PUBLIC ALLOWED: {'checked':1,'blocked':[],'hosts':['cdn.example.test']}
 COMPANION_PROTOCOL_TEST: ALL CHECKS PASSED
 ```
+
+Step [12] drives 2000 stderr lines through the assembly worker and asserts it terminates: `STDERR_DRAINED job finished without deadlock; progress_frames=1 bytes_seen=4096`.
 
 Progress frames carry real byte counts and real media time. Cancel was issued 2 s into a running
 assembly and the job ended `cancelled`. Steps 10–11 use a mocked DNS answer where a public
@@ -180,7 +182,12 @@ These came out of running the tests, not from reading the code.
 10. **A framing error in the native protocol would spin the host.** `run_host` caught a short,
     oversized or unparseable frame, replied, and looped — but a length-prefixed stream cannot be
     resynchronised, so it would emit errors forever. It now ends the session after reporting.
-11. **Two `innerHTML` assignments in the shipped popup** were flagged by SonarCloud's Security
+11. **Retrying a cancelled or failed assembly wrote the wrong file type.** The retry path
+    rebuilt the asset without `type`, and `safeDownloadName` derives the extension from it, so a
+    re-assembled HLS job would have been aimed at a `.bin` file. Fixed, and
+    `tests/test-utilities.cjs` now asserts the retry branch carries a media type — verified by
+    removing it and watching the check go red.
+12. **Two `innerHTML` assignments in the shipped popup** were flagged by SonarCloud's Security
     Rating and removed; the empty-state and CORS blocks are built with `createElement`.
 
 8. **The Edge test's own step 9 was invalid** — it acted on discovery rows while the popup was in

@@ -61,7 +61,6 @@ const dictionary = {
     watchHint: 'Watch this tab for media added after the scan',
     watchChanged: n => `Live watch found ${n} new asset(s) — press Refresh to include them.`,
     workerLost: 'Background service unavailable; downloads still start, but progress needs the popup open.',
-    speed: (bytes, seconds) => `${formatBytesStatic(Math.max(0, bytes) / Math.max(1, seconds))}/s`,
     percentOf: (done, total) => `${formatBytesStatic(done)} / ${formatBytesStatic(total)}`
   },
   ar: {
@@ -113,7 +112,6 @@ const dictionary = {
     watchHint: 'راقب هذا التبويب لاكتشاف وسائط أُضيفت بعد الفحص',
     watchChanged: n => `المراقبة الحية وجدت ${n} عنصرًا جديدًا — اضغط تحديث لإدراجه.`,
     workerLost: 'خدمة الخلفية غير متاحة؛ يبدأ التنزيل لكن التقدّم يتطلب إبقاء النافذة مفتوحة.',
-    speed: (bytes, seconds) => `${formatBytesStatic(Math.max(0, bytes) / Math.max(1, seconds))}/ث`,
     percentOf: (done, total) => `${formatBytesStatic(done)} / ${formatBytesStatic(total)}`
   }
 };
@@ -763,7 +761,11 @@ function renderDownloads() {
 
 async function retryJob(item) {
   if (item.kind === 'companion') {
-    await assembleStreamViaCompanion({url: item.url, format: item.format, name: item.filename});
+    // type must be carried through: safeDownloadName derives the extension from
+    // it, and omitting it would retry an assembly into a .bin file.
+    await assembleStreamViaCompanion({
+      url: item.url, format: item.format, name: item.filename, type: 'video'
+    });
     return;
   }
   let result = state.workerReady

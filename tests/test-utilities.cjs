@@ -89,6 +89,17 @@ test('hidden panels actually hide: every display-declaring class has a [hidden] 
    assert.ok(html.includes(`id="${id}"`), `popup.html lost #${id}`);
  }
 });
+test('re-assembling a finished companion job keeps the media type', () => {
+ // safeDownloadName derives the extension from asset.type. Dropping it on the
+ // retry path silently produced a .bin output for an HLS assembly.
+ const popup = require('fs').readFileSync(require('path').join(__dirname, '..', 'popup.js'), 'utf8');
+ const retry = popup.match(/if \(item\.kind === 'companion'\)[\s\S]{0,400}?return;\s*\}/);
+ assert.ok(retry, 'companion retry branch not found');
+ assert.ok(/type:\s*'video'/.test(retry[0]),
+   'companion retry must pass a media type so the output extension is correct');
+ assert.equal(safeDownloadName({type:'video', url:'https://cdn.test/master.m3u8', format:'hls'}, 3, 'cdn.test'),
+   'KNOuX-GrabFlow/cdn.test/master.m3u8');
+});
 test('stream playlists are copy-only, direct video files are downloadable', () => {
  assert.equal(isDownloadableAsset({type:'video',format:'hls'}), false);
  assert.equal(isDownloadableAsset({type:'video',format:'dash'}), false);

@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'scripts'))
 from assemble_stream import (validate, make_command, canonical_playlist_url,
-                             assert_argv_safe, run_assembly)
+                             assert_argv_safe, run_assembly, safe_output_path)
 
 class CompanionTests(unittest.TestCase):
     def test_accepts_hls_dash_and_querystrings(self):
@@ -54,5 +54,18 @@ class CompanionTests(unittest.TestCase):
         with TemporaryDirectory() as d:
             with self.assertRaises(ValueError):
                 run_assembly('ffmpeg', 'https://e.com/a.m3u8', Path(d) / 'out.mp4')
+
+    def test_output_destination_is_rebuilt_from_an_allowlist(self):
+        """The path handed to FFmpeg is reconstructed, not forwarded."""
+        with TemporaryDirectory() as d:
+            folder = Path(d)
+            self.assertEqual(safe_output_path(folder / 'out.mp4'), str(folder / 'out.mp4'))
+            self.assertEqual(safe_output_path(folder / 'My Movie (1).mkv'),
+                             str(folder / 'My Movie (1).mkv'))
+            for bad in ('-o.mp4', 'out.exe', 'out', '', '.mp4', 'a/b.mp4'):
+                with self.subTest(name=bad), self.assertRaises(ValueError):
+                    safe_output_path(folder / bad)
+            with self.assertRaises(ValueError):
+                safe_output_path(folder / 'missing-dir' / 'out.mp4')
 
 if __name__ == '__main__': unittest.main()

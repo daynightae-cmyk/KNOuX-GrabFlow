@@ -36,6 +36,17 @@ def validate(url: str, output: Path, *, allow_local=False):
 
 
 def find_ffmpeg(custom: str = 'ffmpeg'):
+    # A portable build is legitimate: honour the same variables the companion host
+    # and the test suite use before falling back to PATH.
+    explicit = os.environ.get(f"KNOUX_{custom.upper()}_EXE", "").strip()
+    if explicit and Path(explicit).is_file():
+        return explicit
+    override_dir = os.environ.get("KNOUX_FFMPEG_DIR", "").strip()
+    if override_dir:
+        for suffix in (".exe", "") if os.name == "nt" else ("",):
+            candidate = Path(override_dir) / f"{custom}{suffix}"
+            if candidate.is_file():
+                return str(candidate)
     binary = shutil.which(custom)
     if not binary and sys.platform == 'win32':
         candidates = [

@@ -36,8 +36,8 @@ def run():
         fixtures = temp_root / "media-fixtures"
         (fixtures / "icons").mkdir(parents=True)
         shutil.copy2(ROOT / "icons" / "icon128.png", fixtures / "icons" / "icon128.png")
-        ffmpeg = shutil.which("ffmpeg")
-        ffprobe = shutil.which("ffprobe")
+        import media_tools
+        ffmpeg, ffprobe = media_tools.pair()
         if not ffmpeg or not ffprobe:
             raise RuntimeError("BLOCKED: FFmpeg and FFprobe required for real video download integrity")
         video_fixture = fixtures / "test-video.mp4"
@@ -97,8 +97,9 @@ def run():
                         downloads: !!chrome.downloads,
                         permissions: chrome.runtime.getManifest().permissions,
                     })""")
+                    expected_version = json.loads((ROOT / "manifest.json").read_text())["version"]
                     assert runtime["id"] == extension_id
-                    assert runtime["version"] == "0.6.1", runtime
+                    assert runtime["version"] == expected_version, (runtime["version"], expected_version)
                     assert runtime["nativeMessaging"] and runtime["scripting"] and runtime["downloads"]
                     assert "activeTab" in runtime["permissions"]
                     assert "<all_urls>" not in runtime["permissions"]
@@ -109,7 +110,7 @@ def run():
                     popup.screenshot(path=str(SCREENSHOTS / "real-mv3-ar-rtl.png"))
                     popup.locator("#langBtn").click()
                     assert popup.locator("html").get_attribute("dir") == "ltr"
-                    popup.screenshot(path=str(SCREENSHOTS / "real-mv3-popup-0.6.1.png"))
+                    popup.screenshot(path=str(SCREENSHOTS / "real-mv3-popup.png"))
 
                     # Exercise the actual extension UI and Chrome Downloads API.
                     # Only the discovery result is seeded with a deterministic
@@ -200,7 +201,18 @@ def run():
                     print(f"REAL_MV3_UNPACKED_PASS: {extension_id}")
                     print(f"REAL_CHROME_DOWNLOAD_COMPLETE: {len(actual_bytes)} bytes SHA256={checksum}")
                     print(f"REAL_CHROME_MP4_COMPLETE: {saved_video.stat().st_size} bytes SHA256={video_digest} video+audio ffprobe=PASS")
-                    print("VERIFIED: extension origin, no-mock Chrome downloads API, actual PNG+MP4 file bytes, RTL/LTR")
+                    print("VERIFIED: extension origin, no-mock browser downloads API, actual PNG+MP4 file bytes, RTL/LTR, service worker job persistence")
+                    # The service worker is the reason progress survives a closed popup.
+                    worker_pages = [p for p in context.service_workers]
+                    sw_url = next((w.url for w in worker_pages if "background.js" in w.url), None)
+                    assert sw_url, f"MV3 service worker did not register: {[w.url for w in worker_pages]}"
+                    survivor = popup.evaluate("""async () => {
+                        const before = await chrome.storage.local.get(['grabflowJobs']);
+                        return Array.isArray(before.grabflowJobs) ? before.grabflowJobs.length : -1;
+                    }""")
+                    assert survivor >= 2, f"worker did not persist download jobs to storage: {survivor}"
+                    print(f"SERVICE_WORKER_REGISTERED: {sw_url}")
+                    print(f"WORKER_PERSISTED_JOBS: {survivor}")
                     print("NOT VERIFIED: physical toolbar action, activeTab grant, HLS/DASH assembly via native messaging")
                 finally:
                     context.close()

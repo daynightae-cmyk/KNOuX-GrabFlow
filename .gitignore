@@ -4,3 +4,7 @@ node_modules/
 *.pem
 __pycache__/
 .DS_Store
+
+# Local debug captures; QA evidence is written with edge-*/real-mv3-* names by the suites.
+screenshots/edge-diag-*.png
+screenshots/edge-failure.png

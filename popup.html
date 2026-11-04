@@ -11,16 +11,16 @@
     <header class="header">
       <div class="brand">
         <div class="stag-emblem-wrap">
-          <img src="icons/icon128.png" width="38" height="38" alt="KNOuX Stag" class="stag-emblem" />
+          <img src="icons/icon128.png" width="40" height="40" alt="KNOuX GrabFlow emblem" class="stag-emblem" />
           <span class="stag-glow"></span>
         </div>
         <div>
-          <div class="eyebrow">KNOuX LABS <span class="vtag">ULTIMATE 0.6</span></div>
+          <div class="eyebrow">KNOuX LABS <span class="vtag" id="buildTag">FULL 0.6.3</span></div>
           <div class="brand-name">Grab<span>Flow</span><span class="trademark">™</span></div>
         </div>
       </div>
       <div class="header-actions">
-        <button id="managerToggleBtn" type="button" class="tool-btn" title="Download Manager" aria-label="Toggle Download Manager">
+        <button id="managerToggleBtn" type="button" class="tool-btn" title="Download Manager" aria-label="Toggle Download Manager" aria-pressed="false">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
         </button>
         <button id="langBtn" type="button" class="lang-button" aria-label="Switch language">عربي</button>
@@ -38,7 +38,10 @@
           <div class="total" id="totalCount">—</div>
           <div class="hero-label" data-i18n="detected">Assets detected on this page</div>
         </div>
-        <button id="refreshBtn" type="button" class="refresh" title="Scan again" aria-label="Scan again">↻</button>
+        <div class="hero-tools">
+          <button id="watchToggleBtn" type="button" class="watch-button" data-i18n="watchOff" aria-pressed="false">Live watch: OFF</button>
+          <button id="refreshBtn" type="button" class="refresh" title="Scan again" aria-label="Scan again">↻</button>
+        </div>
       </div>
       <div class="host" id="pageHost">—</div>
     </section>
@@ -120,9 +123,11 @@
         <div id="previewContent" class="preview-content">
           <!-- Dynamically populated -->
         </div>
+        <div id="previewDetails" class="preview-details"></div>
         <div class="preview-footer">
           <div id="previewMeta" class="preview-meta"></div>
           <div class="preview-actions">
+            <button id="previewInspectBtn" type="button" class="secondary text-sm" hidden data-i18n="inspectBtn">Inspect</button>
             <button id="previewCopyBtn" type="button" class="secondary text-sm" data-i18n="copy">Copy Link</button>
             <button id="previewActionBtn" type="button" class="primary text-sm" data-i18n="download">Download</button>
           </div>

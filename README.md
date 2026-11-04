@@ -1,8 +1,40 @@
-# KNOuX GrabFlow™ — Ultimate Production Edition (v0.6.0)
+# KNOuX GrabFlow™ — Full Edition (v0.6.3)
 
 **Intelligent Video & Web Asset Discovery. Private by design. Beautifully engineered.**
 
-An independent KNOuX LABS browser extension for discovering, classifying and saving accessible video files, adaptive stream playlists, audio, images and downloadable documents. Bilingual English/Arabic (RTL), local-only, zero telemetry, no hosted backend.
+An independent KNOuX LABS browser extension for Microsoft Edge and Chrome: discover, classify and
+save accessible video files, adaptive stream playlists, audio, images and downloadable documents.
+Bilingual English/Arabic (RTL), local-only, zero telemetry, no hosted backend.
+
+> **Read `RELEASE_NOTES-v0.6.3.md` and `TEST-REPORT-v0.6.3-EDGE-FULL.md` first.** The sections
+> below describe the v0.6.0–v0.6.1 baseline and several of their statements are now superseded —
+> in particular "native assembly cancellation is disabled" (it works now), "one-shot request;
+> continuous progress not verified" (progress streams and is tested), and the violet-only
+> "Obsidian Glass 2.0" palette (the identity is now the cyan → violet neon of the orb mark).
+> This is an engineering build with real Edge 156 evidence, not a store-approved release.
+
+## What v0.6.3 adds
+
+| Area | Before | Now |
+|---|---|---|
+| Download lifecycle | `onChanged` lived in the popup; reporting stopped when it closed | MV3 service worker owns it; verified to survive a full popup close on Edge |
+| Companion session | one-shot `sendNativeMessage`, host died with popup | persistent `connectNative` port, closed when idle |
+| Assembly progress | none | real FFmpeg `-progress` frames with bytes, media time and percent |
+| Assembly cancel | hard-disabled button, "needs a persistent host session" | terminates the live FFmpeg process |
+| SSRF | manifest URL checked once | nested keys/variants/segments audited, redirects re-validated, DNS pinned |
+| FFmpeg reach | any protocol a playlist named | `-protocol_whitelist` + `-allowed_extensions` confinement |
+| Stream metadata | guessed from file names | `probe` (implemented since v0.5, never wired) shows real duration/bitrate/tracks/DRM flag |
+| Edge companion | registered under the Chrome hive only — unreachable in Edge | registers Chrome **and** Edge hives |
+| Edge QA | Chromium only; "could not complete Load unpacked runtime" | `tests/test-edge-runtime.py` passes 9 steps on Edge 156.0.4314.58 |
+| Detection | DOM + resource timing at Chrome's ~250-entry default buffer | buffer raised to 3000, `initiatorType` recorded, `link rel=preload` / `object` / `embed` added |
+| Identity | violet-only palette, placeholder stag icon | tokens in three layers, icons derived from the supplied orb mark |
+
+Permissions are unchanged and still enforced by tests: `activeTab`, `scripting`, `downloads`,
+`storage`, `nativeMessaging`. No host permissions, no `webRequest`, no `declarativeNetRequest`.
+The manifest test was rewritten rather than removed: it now asserts the worker contains no
+traffic-observation code, which is the guarantee the old `background === undefined` assertion was
+standing in for.
+
 
 ---
 
@@ -34,9 +66,10 @@ An independent KNOuX LABS browser extension for discovering, classifying and sav
   - Companion installer scripts require the exact installed Chrome extension ID; wildcard registration is not permitted.
 - **VS Code Media Companion Extension (`vscode-companion/`):**
   - Developer extension to inspect media URLs, validate HLS/DASH manifests, and trigger GrabFlow stream assembly from VS Code.
-- **Obsidian Glass 2.0 Design System:**
-  - KNOuX stag emblem with pulsing ambient violet nebula lighting.
-  - Palette: `#080512` Obsidian, `#7C3AED` Violet, `#9333EA` Electric Purple, `#C084FC` Lavender Glow.
+- **GrabFlow Neon Design System (v0.6.3):**
+  - Orb mark derived from the supplied logo by `scripts/build-icons.py`; pulsing cyan/violet ambient lighting.
+  - Three token layers — primitive, semantic, component — with the signature gradient
+    `#22D3EE → #8B5CF6 → #E879F9` on a deep indigo field. Rules reference tokens, never raw hex.
   - Full English LTR and Arabic RTL translations, keyboard navigation, and high-DPI assets.
 
 ---
@@ -60,10 +93,10 @@ node --check scan-page.js
 node --check asset-utils.js
 node --check vscode-companion/extension.js
 
-# Scanner & security unit tests (30 checks)
+# Scanner & security unit tests (36 checks)
 node tests/test-scanner.cjs
 
-# Utility & export tests (17 checks)
+# Utility, export and CSS-contract tests (18 checks)
 node tests/test-utilities.cjs
 
 # VS Code companion contract tests (2 checks)

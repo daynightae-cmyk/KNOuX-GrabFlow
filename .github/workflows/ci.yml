@@ -1,4 +1,4 @@
-name: Chrome Extension CI
+name: GrabFlow Extension CI
 on:
   push:
     branches: [main, 'feature/**', 'fix/**']
@@ -19,10 +19,11 @@ jobs:
           node --check popup.js
           node --check scan-page.js
           node --check asset-utils.js
+          node --check background.js
           node --check vscode-companion/extension.js
-      - name: Scanner and security tests
+      - name: Manifest privacy and least-privilege contract
         run: node tests/test-scanner.cjs
-      - name: Utility and export tests
+      - name: Utility, export and hidden-panel contract tests
         run: node tests/test-utilities.cjs
       - name: VS Code companion contract tests
         run: node tests/test-vscode-companion.cjs
@@ -41,16 +42,19 @@ jobs:
           command -v ffmpeg
           command -v ffprobe
           python3 tests/test-stream-matrix.py
-      - name: Create deterministic Chrome zip
+      - name: Real native-messaging protocol, progress, cancel and SSRF matrix
+        run: python3 tests/test-companion-protocol.py
+      - name: Create deterministic Chrome and Edge zips and verify their checksums
         run: python3 scripts/package.py
-      - name: Stage Chrome ZIP for Actions artifact
+      - name: Stage release artifacts
         run: |
           mkdir -p artifacts
-          cp ../KNOuX-GrabFlow-CHROME-v*.zip artifacts/
+          cp ../KNOuX-GrabFlow-CHROME-v*.zip ../KNOuX-GrabFlow-EDGE-v*.zip artifacts/
+          cp RELEASE_CHECKSUMS-*.sha256 artifacts/
       - uses: actions/upload-artifact@v4
         with:
-          name: KNOuX-GrabFlow-chrome
-          path: artifacts/*.zip
+          name: KNOuX-GrabFlow-packages
+          path: artifacts/*
           if-no-files-found: error
 
   browser-e2e-and-matrix:
@@ -72,8 +76,36 @@ jobs:
         run: python tests/test-ui.py
       - name: 20-Fixture Real Browser Matrix E2E Test Suite
         run: python tests/test-e2e-matrix.py
-      - name: Real unpacked Chrome MV3 API and byte-verified download E2E
+      - name: Real unpacked MV3 API, byte-verified download and worker persistence E2E
         run: python tests/test-real-mv3.py
+
+  edge-runtime-windows:
+    name: Real Microsoft Edge runtime QA (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Playwright (Edge is preinstalled on the runner image)
+        run: python -m pip install 'playwright==1.55.0'
+      - name: Report Edge build under test
+        shell: pwsh
+        run: |
+          $edge = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+          if (-not (Test-Path $edge)) { $edge = "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe" }
+          "EDGE_PATH=$edge"
+          (Get-Item $edge).VersionInfo.ProductVersion
+      - name: Branded Edge load-unpacked, service worker and byte-verified downloads
+        run: python tests/test-edge-runtime.py
+      - name: Upload Edge evidence screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: edge-runtime-evidence
+          path: screenshots/edge-*.png
+          if-no-files-found: warn
 
   native-messaging-windows:
     name: Real Chrome to Native Messaging handshake (Windows)

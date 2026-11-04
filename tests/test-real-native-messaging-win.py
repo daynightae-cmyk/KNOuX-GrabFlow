@@ -112,7 +112,8 @@ def main():
                     assert pong["response"]["action"] == "pong", pong
                     assert pong["response"]["host"] == HOST, pong
                     assert pong["response"]["version"] == "0.6.1", pong
-                    ffmpeg_found = bool(shutil.which("ffmpeg"))
+                    import media_tools
+                    ffmpeg_found = bool(media_tools.ffmpeg())
                     assert pong["response"]["ffmpegAvailable"] == ffmpeg_found, pong
                     blocked = send(page, {
                         "action": "probe",

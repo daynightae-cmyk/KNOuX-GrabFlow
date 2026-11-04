@@ -20,7 +20,7 @@ function makeNode(attrs = {}, extra = {}) {
     querySelectorAll: selector => (extra.children || {})[selector] || [],
   };
 }
-function run({imgs=[], videos=[], audios=[], pictures=[], metas=[], links=[], css=[], scripts=[], resourceUrls=[], dynamicPlayers=[], iframes=[], hostname='example.com', title='Example', url='https://example.com/page'} = {}) {
+function run({imgs=[], videos=[], audios=[], pictures=[], metas=[], links=[], css=[], scripts=[], resourceUrls=[], resourceEntries=[], dynamicPlayers=[], iframes=[], preloads=[], objects=[], hostname='example.com', title='Example', url='https://example.com/page', bufferSize=null} = {}) {
   const document = {
     baseURI: url, title,
     querySelectorAll: selector => ({
@@ -30,12 +30,23 @@ function run({imgs=[], videos=[], audios=[], pictures=[], metas=[], links=[], cs
       'a[href]': links, '[style*="background"]': css,
       'script[type="application/ld+json"]': scripts,
       'video-js, plyr, media-player, video-player, [data-player], .jwplayer, .vjs-tech': dynamicPlayers,
-      'iframe': iframes
+      'iframe': iframes,
+      'link[rel="preload"],link[rel="preconnect"],link[rel="preload"]': preloads,
+      'object[data],embed[src]': objects
     })[selector] || []
   };
-  const performance = {getEntriesByType: type => type === 'resource' ? resourceUrls.map(name=>({name})) : []};
+  const entries = resourceEntries.length
+    ? resourceEntries
+    : resourceUrls.map(name => ({name}));
+  const performance = {
+    getEntriesByType: type => type === 'resource' ? entries : [],
+    // The real browser exposes this; the scanner must ask for a larger buffer
+    // because Chrome stops recording at ~250 entries by default.
+    ...(bufferSize === false ? {} : {setResourceTimingBufferSize: size => { bufferSizeSeen = size; }})
+  };
   return vm.runInNewContext(`${scanner}\nscanPageAssets()`, {document, location: {hostname, href: url}, URL, Set, String, RegExp, performance});
 }
+let bufferSizeSeen = null;
 function test(name, fn) { fn(); passed++; console.log('PASS', name); }
 
 test('manifest uses MV3 with least-privilege click-to-scan and no all-sites permission', () => {
@@ -43,7 +54,18 @@ test('manifest uses MV3 with least-privilege click-to-scan and no all-sites perm
   assert.equal(m.manifest_version, 3);
   assert.deepEqual(m.permissions, ['activeTab','scripting','downloads','storage','nativeMessaging']);
   assert.equal(m.host_permissions, undefined);
-  assert.equal(m.background, undefined);
+  assert.equal(m.optional_permissions, undefined);
+  assert.equal(m.declarative_net_request, undefined);
+  // A background worker is permitted, but only for the download lifecycle and
+  // the companion session. It must never gain scanning or traffic powers.
+  assert.deepEqual(m.background, {service_worker: 'background.js'});
+  const rawWorker = fs.readFileSync(path.join(root,'background.js'),'utf8');
+  // Comments may name a forbidden API to explain why it is absent; only code counts.
+  const worker = rawWorker.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  for (const forbidden of ['webRequest','declarativeNetRequest','executeScript','<all_urls>',
+                           'cookies','history','debugger','tabs.query']) {
+    assert.ok(!worker.includes(forbidden), `background.js must not reference ${forbidden}`);
+  }
 });
 test('extracts and normalizes image relative URLs', () => {
   const page = run({imgs: [makeNode({src: '/images/test.png', alt:'Sample'})]});
@@ -222,6 +244,65 @@ test('discovers streaming sources from data-hls-src and data-file player attribu
   assert.equal(page.assets.length, 1);
   assert.equal(page.assets[0].format, 'hls');
   assert.equal(page.assets[0].isPlaylist, true);
+});
+
+test('discovers media declared by link rel=preload without issuing any request', () => {
+  const nodes = [
+    makeNode({rel: 'preload', as: 'video', href: '/media/feature.mp4'}),
+    makeNode({rel: 'preload', as: 'audio', href: '/media/voice.mp3'}),
+    makeNode({rel: 'preload', as: 'image', href: '/media/hero.webp'}),
+    makeNode({rel: 'preload', href: '/media/master.m3u8'})
+  ];
+  const page = run({preloads: nodes});
+  const byUrl = Object.fromEntries(page.assets.map(a => [a.url.split('/').pop(), a]));
+  assert.equal(byUrl['feature.mp4'].type, 'video');
+  assert.equal(byUrl['voice.mp3'].type, 'audio');
+  assert.equal(byUrl['hero.webp'].type, 'image');
+  assert.equal(byUrl['master.m3u8'].format, 'hls');
+  assert.ok(page.assets.every(a => a.source === 'preload'));
+});
+test('discovers plugin media from object data and embed src', () => {
+  const page = run({objects: [
+    makeNode({data: 'https://legacy.example.com/lecture.mp4', title: 'Lecture'}),
+    makeNode({src: 'https://legacy.example.com/song.mp3'}),
+    makeNode({data: 'https://legacy.example.com/spec.pdf'})
+  ]});
+  // Spread into an outer-realm array: vm results are cross-realm Arrays and
+  // deepStrictEqual compares prototypes.
+  const kinds = [...page.assets].map(a => `${a.type}:${a.source}`);
+  assert.deepEqual(kinds.sort(), ['audio:object', 'document:object', 'video:object']);
+});
+test('records the browser initiatorType so a UI can show what asked for the media', () => {
+  const page = run({resourceEntries: [
+    {name: 'https://cdn.example.com/feature.mp4', initiatorType: 'video'},
+    {name: 'https://cdn.example.com/podcast.mp3', initiatorType: 'audio'},
+    {name: 'https://cdn.example.com/report.pdf', initiatorType: 'xmlhttprequest'}
+  ]});
+  const byName = Object.fromEntries(page.assets.map(a => [a.url.split('/').pop(), a]));
+  assert.equal(byName['feature.mp4'].initiatorType, 'video');
+  assert.equal(byName['podcast.mp3'].initiatorType, 'audio');
+  assert.equal(byName['report.pdf'].initiatorType, 'xmlhttprequest');
+});
+test('expands the resource timing buffer so late manifests are still visible', () => {
+  bufferSizeSeen = null;
+  run({resourceUrls: ['https://cdn.example.com/a.mp4']});
+  assert.equal(bufferSizeSeen, 3000);
+});
+test('survives a browser without setResourceTimingBufferSize', () => {
+  bufferSizeSeen = null;
+  const page = run({resourceUrls: ['https://cdn.example.com/b.mp4'], bufferSize: false});
+  assert.equal(page.assets[0].url, 'https://cdn.example.com/b.mp4');
+});
+test('still refuses every media type on YouTube hosts, including resource timing', () => {
+  const page = run({
+    hostname: 'www.youtube.com',
+    resourceEntries: [
+      {name: 'https://cdn.example.com/clip.mp4', initiatorType: 'video'},
+      {name: 'https://cdn.example.com/talk.mp3', initiatorType: 'audio'}
+    ],
+    objects: [makeNode({data: 'https://cdn.example.com/lecture.mp4'})]
+  });
+  assert.equal(page.assets.filter(a => ['video', 'audio'].includes(a.type)).length, 0);
 });
 
 console.log(`\n${passed} scanner/security checks passed.`);

@@ -18,6 +18,16 @@ function scanPageAssets() {
   const validTypes = Object.keys(extensions);
   const audioMime = /^(?:audio\/(?:mpeg|mp4|aac|wav|flac|ogg|opus|webm))\b/i;
 
+  // Chrome's resource-timing buffer holds only ~250 entries by default and
+  // silently stops recording once full — which is exactly when a media page
+  // has fetched its manifest. Ask for more before reading, so players that
+  // start after load are still visible on the next scan.
+  try {
+    if (typeof performance.setResourceTimingBufferSize === 'function') {
+      performance.setResourceTimingBufferSize(3000);
+    }
+  } catch (_) { /* not fatal: reading what we have is still useful */ }
+
   // A playlist is a recipe for many segments, not a downloadable complete video.
   function videoFormat(value, mime = '') {
     const v = String(value || '');
@@ -71,6 +81,7 @@ function scanPageAssets() {
       type, url, name: (name || `${type} asset`).slice(0, 140), source,
       width: w, height: h
     };
+    if (extra.initiatorType) item.initiatorType = String(extra.initiatorType).slice(0, 20);
     if (type === 'video') {
       const format = videoFormat(url, mime);
       const isPlaylist = ['hls', 'dash'].includes(format);
@@ -250,6 +261,35 @@ function scanPageAssets() {
     }
     if (assets.length >= LIMIT) break;
   }
+  // Declarative media references the DOM exposes that a plain <video> scan misses:
+  // preload hints, plugin objects and embeds. All attribute reads; no new requests.
+  for (const link of document.querySelectorAll('link[rel="preload"],link[rel="preconnect"],link[rel="preload"]')) {
+    const as = (link.getAttribute('as') || '').toLowerCase();
+    const href = link.getAttribute('href');
+    if (!href) continue;
+    if (as === 'video' && classifyVideo(href, link.getAttribute('type'))) {
+      add('video', href, link.getAttribute('title') || '', 'preload');
+    } else if (as === 'audio' && classifyAudio(href, link.getAttribute('type'))) {
+      add('audio', href, link.getAttribute('title') || '', 'preload');
+    } else if (as === 'image') {
+      add('image', href, link.getAttribute('title') || '', 'preload');
+    } else if (/\.(?:m3u8|mpd)(?:[?#]|$)/i.test(href) && !blockedVideo) {
+      add('video', href, link.getAttribute('title') || '', 'preload');
+    }
+    if (assets.length >= LIMIT) break;
+  }
+  for (const node of document.querySelectorAll('object[data],embed[src]')) {
+    const candidate = node.getAttribute('data') || node.getAttribute('src');
+    if (!candidate) continue;
+    if (classifyVideo(candidate, node.getAttribute('type')) && !blockedVideo) {
+      add('video', candidate, node.getAttribute('title') || '', 'object');
+    } else if (classifyAudio(candidate, node.getAttribute('type'))) {
+      add('audio', candidate, node.getAttribute('title') || '', 'object');
+    } else if (extensions.document.test(candidate)) {
+      add('document', candidate, node.getAttribute('title') || '', 'object');
+    }
+    if (assets.length >= LIMIT) break;
+  }
   // Only direct media formats from OpenGraph; no playlist, page player or DRM.
   for (const meta of document.querySelectorAll('meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"],meta[property="og:video"],meta[property="og:video:url"],meta[property="og:video:secure_url"],meta[property="og:audio"],meta[property="og:audio:secure_url"],meta[name="twitter:player:stream"]')) {
     const tag = meta.getAttribute('property') || meta.getAttribute('name') || '';
@@ -279,12 +319,22 @@ function scanPageAssets() {
   }
   // Video-first: read public Resource Timing *names* from the current page only.
   // Do NOT fetch or intercept network traffic and do NOT collect streaming segments.
-  if (!blockedVideo && typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function') {
+  // The browser's own initiatorType labels what asked for the resource, which is
+  // more reliable than guessing from the file name alone.
+  if (typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function') {
     let checked = 0;
     for (const entry of performance.getEntriesByType('resource')) {
-      if (++checked > 1200 || assets.length >= LIMIT) break;
-      if (typeof entry.name === 'string' && classifyVideo(entry.name)) {
-        add('video', entry.name, '', 'resource-timing');
+      if (++checked > 3000 || assets.length >= LIMIT) break;
+      if (typeof entry.name !== 'string') continue;
+      const kind = String(entry.initiatorType || '');
+      if (!blockedVideo && classifyVideo(entry.name)) {
+        add('video', entry.name, '', 'resource-timing', 0, 0, '', {initiatorType: kind});
+      } else if (blockedVideo) {
+        continue;
+      } else if (kind === 'audio' || classifyAudio(entry.name)) {
+        add('audio', entry.name, '', 'resource-timing', 0, 0, '', {initiatorType: kind});
+      } else if (extensions.document.test(entry.name)) {
+        add('document', entry.name, '', 'resource-timing', 0, 0, '', {initiatorType: kind});
       }
     }
   }

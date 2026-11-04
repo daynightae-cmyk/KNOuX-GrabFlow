@@ -5,9 +5,9 @@ const ui = Object.fromEntries([
   'selectVisible', 'clearSelection', 'copyBtn', 'downloadBtn', 'notice', 'countAll',
   'countImage', 'countVideo', 'countStream', 'countAudio', 'countDocument', 'sortMode', 'largeImages',
   'csvBtn', 'exportJsonBtn', 'downloadStatus', 'managerToggleBtn', 'scannerView', 'managerView',
-  'managerList', 'managerCount', 'clearHistoryBtn', 'companionStatus',
+  'managerList', 'managerCount', 'clearHistoryBtn', 'companionStatus', 'watchToggleBtn', 'buildTag',
   'previewModal', 'previewBackdrop', 'previewTitle', 'previewCloseBtn', 'previewContent',
-  'previewMeta', 'previewCopyBtn', 'previewActionBtn'
+  'previewMeta', 'previewCopyBtn', 'previewActionBtn', 'previewInspectBtn', 'previewDetails'
 ].map(id => [id, document.getElementById(id)]));
 
 const dictionary = {
@@ -28,24 +28,41 @@ const dictionary = {
     sortBy: 'Sort', pageOrder: 'Page order', sortName: 'Name A–Z', sortType: 'File type',
     largeOnly: 'Large images', exportCsv: 'CSV', exportJson: 'JSON',
     csvCopied: 'CSV copied for visible results.', jsonCopied: 'Structured JSON copied for visible results.',
-    streamHint: 'Stream playlist — needs companion to produce one playable video.',
-    streamNotDirect: 'HLS/DASH playlists cannot be saved as complete videos with Chrome Downloads alone. Use the KNOuX Native Companion or copy links.',
-    streamSkipped: n => `${n} streaming playlists skipped (use Assemble button or copy links).`,
+    streamHint: 'Stream playlist — needs the companion to produce one playable video.',
+    streamNotDirect: 'HLS/DASH playlists cannot be saved as complete videos by the browser alone. Use Assemble, or copy links.',
+    streamSkipped: n => `${n} streaming playlists skipped (use Assemble, or copy links).`,
     downloadProgress: (c, r, f) => `Downloads: ${c} complete · ${r} running · ${f} failed`,
     downloadManagerTitle: 'Download Manager', clearHistory: 'Clear History',
     noDownloads: 'No active or recent downloads.', openFile: 'Open', showFolder: 'Folder',
     retry: 'Retry', cancel: 'Cancel', stateComplete: 'Complete', stateInProgress: 'Downloading',
-    stateInterrupted: 'Interrupted', stateFailed: 'Failed',
-    companionConnected: 'COMPANION: CONNECTED', companionChecking: 'COMPANION: CHECKING', companionMissing: 'COMPANION: NOT INSTALLED',
+    stateInterrupted: 'Interrupted', stateFailed: 'Failed', stateCancelled: 'Cancelled',
+    statePending: 'Queued',
+    companionConnected: 'COMPANION: CONNECTED', companionChecking: 'COMPANION: CHECKING',
+    companionMissing: 'COMPANION: NOT INSTALLED',
     companionToolsMissing: 'COMPANION: FFMPEG/FFPROBE MISSING', cancelUnavailable: 'Cancel unavailable',
     subtitlesLabel: n => `${n} SUBTITLES`,
     mediaPreview: 'Media Preview', previewBtn: 'Preview',
     assembleWithCompanion: '⚡ Assemble', copyFfmpeg: '📋 FFmpeg',
-    ffmpegCopied: 'FFmpeg assembly command copied! Run in terminal or register companion.',
-    assemblyStarted: 'Companion stream assembly started! Tracking in Download Manager.',
-    assemblySuccess: 'Stream assembled successfully into single video file.',
+    ffmpegCopied: 'FFmpeg assembly command copied! Run it in a terminal or install the companion.',
+    assemblyStarted: 'Companion assembly started — tracking in the Download Manager.',
+    assemblySuccess: 'Stream assembled into a single playable video file.',
     assemblyFailed: 'Stream assembly failed.',
-    corsNotice: 'Direct preview blocked by website CORS. Direct download remains intact.'
+    corsNotice: 'Direct preview blocked by website CORS. Direct download remains intact.',
+    inspectBtn: 'Inspect', inspecting: 'Reading stream with ffprobe…',
+    inspectUnavailable: 'Inspection needs the native companion with FFmpeg installed.',
+    inspectFailed: 'The companion could not read this stream.',
+    inspectDuration: 'Duration', inspectBitrate: 'Bitrate', inspectTracks: 'Tracks',
+    inspectContainer: 'Container', inspectSize: 'Reported size', inspectHosts: 'Source hosts',
+    inspectDrm: 'Encryption/DRM suspected — assembly will be refused.',
+    auditPassed: n => `Nested audit: ${n} references verified public`,
+    auditUnavailable: 'Nested audit unavailable — FFmpeg transport whitelist still enforced.',
+    cancelledJob: 'Assembly cancelled.',
+    watchOn: 'Live watch: ON', watchOff: 'Live watch: OFF',
+    watchHint: 'Watch this tab for media added after the scan',
+    watchChanged: n => `Live watch found ${n} new asset(s) — press Refresh to include them.`,
+    workerLost: 'Background service unavailable; downloads still start, but progress needs the popup open.',
+    speed: (bytes, seconds) => `${formatBytesStatic(Math.max(0, bytes) / Math.max(1, seconds))}/s`,
+    percentOf: (done, total) => `${formatBytesStatic(done)} / ${formatBytesStatic(total)}`
   },
   ar: {
     heroNote: 'محلي • خصوصية • عند الطلب', detected: 'ملف قابل للاكتشاف في الصفحة',
@@ -64,24 +81,40 @@ const dictionary = {
     sortBy: 'الترتيب', pageOrder: 'ترتيب الصفحة', sortName: 'بالاسم', sortType: 'نوع الملف',
     largeOnly: 'الصور الكبيرة', exportCsv: 'CSV', exportJson: 'JSON',
     csvCopied: 'تم نسخ CSV للنتائج الظاهرة.', jsonCopied: 'تم نسخ بيانات JSON المهيكلة للنتائج.',
-    streamHint: 'قائمة بث تحتاج المساعد المحلي لإنتاج فيديو كامل.',
-    streamNotDirect: 'قوائم HLS/DASH ليست ملفات فيديو مباشرة. استخدم زر التجميع بالمساعد أو انسخ الروابط.',
-    streamSkipped: n => `تم تجاوز ${n} قائمة بث؛ استخدم زر التجميع أو انسخ الروابط.`,
+    streamHint: 'قائمة بث تحتاج المساعد المحلي لإنتاج فيديو كامل واحد.',
+    streamNotDirect: 'قوائم HLS/DASH لا تُحفظ كفيديو كامل بالمساعد المتصفح وحده. استخدم تجميع أو انسخ الروابط.',
+    streamSkipped: n => `تم تجاوز ${n} قائمة بث؛ استخدم تجميع أو انسخ الروابط.`,
     downloadProgress: (c, r, f) => `التنزيل: ${c} مكتمل · ${r} جارٍ · ${f} فشل`,
     downloadManagerTitle: 'إدارة التحميلات', clearHistory: 'مسح السجل',
     noDownloads: 'لا توجد تنزيلات نشطة أو سابقة.', openFile: 'فتح', showFolder: 'المجلد',
     retry: 'إعادة', cancel: 'إلغاء', stateComplete: 'مكتمل', stateInProgress: 'جارٍ التحميل',
-    stateInterrupted: 'متوقف', stateFailed: 'فشل',
+    stateInterrupted: 'متوقف', stateFailed: 'فشل', stateCancelled: 'ملغى', statePending: 'في الانتظار',
+    companionConnected: 'المساعد: متصل', companionChecking: 'المساعد: جارٍ التحقق',
+    companionMissing: 'المساعد: غير مثبت',
     companionToolsMissing: 'المساعد: FFmpeg/FFprobe غير متاحين', cancelUnavailable: 'الإلغاء غير متاح',
-    companionConnected: 'المساعد: متصل', companionChecking: 'المساعد: جارٍ التحقق', companionMissing: 'المساعد: غير مثبت',
     subtitlesLabel: n => `${n} ترجمة`,
     mediaPreview: 'معاينة الوسائط', previewBtn: 'معاينة',
     assembleWithCompanion: '⚡ تجميع', copyFfmpeg: '📋 أمر FFmpeg',
-    ffmpegCopied: 'تم نسخ أمر FFmpeg! شغّله في الطرفية أو سجّل المساعد المحلي.',
-    assemblyStarted: 'بدأ تجميع البث عبر المساعد! يمكنك المتابعة في إدارة التحميلات.',
-    assemblySuccess: 'تم تجميع قائمة البث بنجاح كملف فيديو موحد.',
+    ffmpegCopied: 'تم نسخ أمر FFmpeg! شغّله في الطرفية أو ثبّت المساعد المحلي.',
+    assemblyStarted: 'بدأ تجميع البث — تابعه في إدارة التحميلات.',
+    assemblySuccess: 'تم تجميع قائمة البث في ملف فيديو واحد قابل للتشغيل.',
     assemblyFailed: 'تعذر تجميع قائمة البث.',
-    corsNotice: 'المعاينة المباشرة محجوبة بسياسة CORS من الموقع. التنزيل يعمل بشكل طبيعي.'
+    corsNotice: 'المعاينة المباشرة محجوبة بسياسة CORS من الموقع. التنزيل يعمل بشكل طبيعي.',
+    inspectBtn: 'فحص', inspecting: 'جارٍ قراءة البث بـ ffprobe…',
+    inspectUnavailable: 'الفحص يحتاج المساعد المحلي مع FFmpeg.',
+    inspectFailed: 'لم يستطع المساعد قراءة هذا البث.',
+    inspectDuration: 'المدة', inspectBitrate: 'معدل البيانات', inspectTracks: 'المسارات',
+    inspectContainer: 'الحاوية', inspectSize: 'الحجم المُبلغ', inspectHosts: 'مصادر الاستضافة',
+    inspectDrm: 'يُشتبه بتشفير/DRM — سيرفض التجميع.',
+    auditPassed: n => `تدقيق داخلي: ${n} مرجعًا تحققت أنها عامة`,
+    auditUnavailable: 'التدقيق الداخلي غير متاح — قائمة بروتوكولات FFmpeg ما زالت مطبقة.',
+    cancelledJob: 'أُلغي التجميع.',
+    watchOn: 'المراقبة الحية: مفعّلة', watchOff: 'المراقبة الحية: متوقفة',
+    watchHint: 'راقب هذا التبويب لاكتشاف وسائط أُضيفت بعد الفحص',
+    watchChanged: n => `المراقبة الحية وجدت ${n} عنصرًا جديدًا — اضغط تحديث لإدراجه.`,
+    workerLost: 'خدمة الخلفية غير متاحة؛ يبدأ التنزيل لكن التقدّم يتطلب إبقاء النافذة مفتوحة.',
+    speed: (bytes, seconds) => `${formatBytesStatic(Math.max(0, bytes) / Math.max(1, seconds))}/ث`,
+    percentOf: (done, total) => `${formatBytesStatic(done)} / ${formatBytesStatic(total)}`
   }
 };
 
@@ -93,10 +126,13 @@ const state = {
   busy: false,
   tab: null,
   page: null,
-  view: 'scanner', // 'scanner' | 'manager'
-  companion: { connected: false, version: null, missingTools: false },
-  activeDownloads: new Map(),
-  previewingAsset: null
+  view: 'scanner',
+  companion: {connected: false, missingTools: false, version: null, capabilities: []},
+  jobs: new Map(),
+  previewingAsset: null,
+  workerReady: false,
+  liveWatch: false,
+  liveBaselineCount: 0
 };
 
 const t = (key, ...args) => {
@@ -104,12 +140,132 @@ const t = (key, ...args) => {
   return typeof value === 'function' ? value(...args) : value;
 };
 
-function formatBytes(bytes) {
+function formatBytesStatic(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB'];
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
 }
+const formatBytes = formatBytesStatic;
+
+/* ----------------------------------------------------------- worker bridge --
+ * The popup is a view. The service worker owns download and companion state so
+ * that tracking survives the popup closing; this bridge mirrors that state in.
+ * -------------------------------------------------------------------------- */
+
+function sendToWorker(type, payload) {
+  return new Promise(resolve => {
+    if (!chrome.runtime?.sendMessage) { resolve(null); return; }
+    try {
+      chrome.runtime.sendMessage(Object.assign({type}, payload || {}), response => {
+        if (chrome.runtime.lastError) { resolve(null); return; }
+        resolve(response ?? null);
+      });
+    } catch (_) { resolve(null); }
+  });
+}
+
+let uiPort = null;
+
+function connectWorker() {
+  if (!chrome.runtime?.connect) { onWorkerLost(); return; }
+  try {
+    uiPort = chrome.runtime.connect({name: 'grabflow-ui'});
+  } catch (_) { onWorkerLost(); return; }
+  state.workerReady = true;
+  uiPort.onMessage.addListener(handleWorkerEvent);
+  uiPort.onDisconnect.addListener(() => {
+    uiPort = null;
+    state.workerReady = false;
+    setTimeout(connectWorker, 1200);   // the worker is restarted on demand
+  });
+}
+
+function handleWorkerEvent(event) {
+  if (!event || typeof event !== 'object') return;
+  if (event.type === 'hydrate') {
+    state.workerReady = true;
+    for (const job of (event.jobs || [])) state.jobs.set(job.key, job);
+    if (event.companion) state.companion = event.companion;
+    renderDownloads();
+    renderCompanion();
+  } else if (event.type === 'job') {
+    state.jobs.set(event.job.key, event.job);
+    renderDownloads();
+    renderDownloadStatus();
+  } else if (event.type === 'companion') {
+    state.companion = event.state;
+    state.workerReady = true;
+    renderCompanion();
+    if (state.page) render();
+  } else if (event.type === 'cleared') {
+    state.jobs.clear();
+    for (const job of (event.jobs || [])) state.jobs.set(job.key, job);
+    renderDownloads();
+    renderDownloadStatus();
+  }
+}
+
+function onWorkerLost() {
+  state.workerReady = false;
+  notice(t('workerLost'), true);
+  armPopupDownloadFallback();
+}
+
+/**
+ * Graceful degradation. When the service worker is unreachable — a crash, a
+ * restart race, or a host that exposes no runtime messaging — downloads must
+ * still start and still be tracked in this window. Progress simply stops
+ * being reported once the popup closes, and the notice above says so.
+ */
+let popupFallbackArmed = false;
+function armPopupDownloadFallback() {
+  if (popupFallbackArmed || !chrome.downloads?.onChanged?.addListener) return;
+  popupFallbackArmed = true;
+  chrome.downloads.onChanged.addListener(delta => {
+    const key = `chrome-${delta.id}`;
+    const job = state.jobs.get(key);
+    if (!job) return;
+    if (delta.state) job.state = delta.state.current;
+    if (delta.error) job.error = delta.error.current;
+    if (delta.bytesReceived !== undefined) job.bytesReceived = delta.bytesReceived.current;
+    if (delta.totalBytes !== undefined) job.totalBytes = delta.totalBytes.current;
+    job.updatedAt = Date.now();
+    renderDownloads();
+    renderDownloadStatus();
+  });
+}
+
+async function startDownloadLocal(asset, index, domain) {
+  const filename = safeDownloadName(asset, index, domain);
+  try {
+    const id = await chrome.downloads.download({
+      url: asset.url, filename, conflictAction: 'uniquify', saveAs: false
+    });
+    if (typeof id !== 'number') throw new Error('no download id');
+    const key = `chrome-${id}`;
+    state.jobs.set(key, {
+      key, kind: 'chrome', id, url: asset.url, filename, domain,
+      format: asset.format || asset.type, state: 'in_progress',
+      bytesReceived: 0, totalBytes: 0, updatedAt: Date.now()
+    });
+    // Reconcile immediately: a small local file can finish before we get here.
+    try {
+      const found = await chrome.downloads.search({id});
+      const record = found && found[0];
+      if (record) Object.assign(state.jobs.get(key), {
+        state: record.state, bytesReceived: record.bytesReceived,
+        totalBytes: record.totalBytes, fileSize: record.fileSize,
+        filename: record.filename || filename, error: record.error, updatedAt: Date.now()
+      });
+    } catch (_) { /* status is optional */ }
+    return {ok: true, id, filename};
+  } catch (_) {
+    return {ok: false, error: 'download-failed', filename};
+  }
+}
+
+/* --------------------------------------------------------------- i18n / chrome */
 
 function translate() {
   document.documentElement.lang = state.lang;
@@ -120,13 +276,28 @@ function translate() {
   });
   ui.search.placeholder = t('search');
   ui.selectedLabel.textContent = t('selected', state.selected.size);
-  if (ui.companionStatus) {
-    ui.companionStatus.textContent = state.companion.connected
-      ? t('companionConnected') : state.companion.missingTools ? t('companionToolsMissing') : t('companionMissing');
+  if (ui.watchToggleBtn) {
+    ui.watchToggleBtn.textContent = state.liveWatch ? t('watchOn') : t('watchOff');
+    ui.watchToggleBtn.title = t('watchHint');
+    ui.watchToggleBtn.classList.toggle('active', state.liveWatch);
+    ui.watchToggleBtn.setAttribute('aria-pressed', String(state.liveWatch));
   }
+  renderCompanion();
   if (state.page) render();
   renderDownloads();
-  if (!ui.downloadStatus.hidden) restoreDownloadStatus();
+  renderDownloadStatus();
+}
+
+function renderCompanion() {
+  if (!ui.companionStatus) return;
+  const label = state.companion.connected
+    ? t('companionConnected')
+    : state.companion.missingTools ? t('companionToolsMissing') : t('companionMissing');
+  ui.companionStatus.textContent = label;
+  ui.companionStatus.classList.toggle('connected', !!state.companion.connected);
+  ui.companionStatus.title = state.companion.version
+    ? `v${state.companion.version} · ${(state.companion.capabilities || []).join(', ')}`
+    : (state.companion.error || label);
 }
 
 function notice(message, error = false) {
@@ -138,10 +309,7 @@ function notice(message, error = false) {
 function visibleAssets() {
   const query = ui.search.value.toLocaleLowerCase().trim();
   return filterSortAssets(state.assets, {
-    type: state.filter,
-    query,
-    sort: ui.sortMode.value,
-    largeImages: ui.largeImages.checked
+    type: state.filter, query, sort: ui.sortMode.value, largeImages: ui.largeImages.checked
   });
 }
 
@@ -178,9 +346,7 @@ function render() {
   const counts = {all: state.assets.length, image: 0, video: 0, stream: 0, document: 0, audio: 0};
   for (const asset of state.assets) {
     counts[asset.type]++;
-    if (asset.type === 'video' && ['hls', 'dash'].includes(asset.format)) {
-      counts.stream++;
-    }
+    if (asset.type === 'video' && ['hls', 'dash'].includes(asset.format)) counts.stream++;
   }
   ui.countAll.textContent = counts.all;
   ui.countImage.textContent = counts.image;
@@ -245,67 +411,52 @@ function render() {
       if (isStream) format.title = t('streamHint');
       badges.append(format);
 
-      if (asset.resolution) {
-        const res = document.createElement('span');
-        res.className = 'asset-format';
-        res.textContent = asset.resolution;
-        badges.append(res);
-      }
-      if (asset.codec) {
-        const c = document.createElement('span');
-        c.className = 'asset-format';
-        c.textContent = asset.codec.slice(0, 16);
-        badges.append(c);
-      }
-      if (asset.duration) {
-        const dur = document.createElement('span');
-        dur.className = 'asset-meta';
-        dur.textContent = formatDuration(asset.duration);
-        badges.append(dur);
-      }
-      if (asset.hasSubtitles && asset.subtitles?.length) {
-        const sub = document.createElement('span');
-        sub.className = 'asset-subtag';
-        sub.textContent = t('subtitlesLabel', asset.subtitles.length);
-        badges.append(sub);
-      }
+      if (asset.resolution) badges.append(Object.assign(document.createElement('span'),
+        {className: 'asset-format', textContent: asset.resolution}));
+      if (asset.codec) badges.append(Object.assign(document.createElement('span'),
+        {className: 'asset-format', textContent: String(asset.codec).slice(0, 16)}));
+      if (asset.duration) badges.append(Object.assign(document.createElement('span'),
+        {className: 'asset-meta', textContent: formatDuration(asset.duration)}));
+      if (asset.initiatorType) badges.append(Object.assign(document.createElement('span'),
+        {className: 'asset-format', textContent: asset.initiatorType.toUpperCase(),
+         title: 'Browser resource type'}));
+      if (asset.hasSubtitles && asset.subtitles?.length) badges.append(Object.assign(
+        document.createElement('span'), {className: 'asset-subtag',
+        textContent: t('subtitlesLabel', asset.subtitles.length)}));
     } else if (asset.type === 'image' && asset.width && asset.height) {
-      const dimensions = document.createElement('span');
-      dimensions.className = 'asset-meta';
-      dimensions.textContent = `${asset.width} × ${asset.height} px`;
-      badges.append(dimensions);
+      badges.append(Object.assign(document.createElement('span'),
+        {className: 'asset-meta', textContent: `${asset.width} × ${asset.height} px`}));
     }
     if (badges.childNodes.length > 0) info.append(badges);
 
-    // Card Quick Actions (Preview, Assemble, FFmpeg command)
     const actionsBar = document.createElement('div');
     actionsBar.className = 'asset-actions';
 
-    // Preview button
     if (['image', 'video', 'audio'].includes(asset.type) && !isStream) {
       const prevBtn = document.createElement('button');
       prevBtn.type = 'button';
       prevBtn.className = 'btn-card-action';
-      prevBtn.textContent = `👁 ${t('previewBtn')}`;
-      prevBtn.addEventListener('click', e => {
-        e.preventDefault();
-        e.stopPropagation();
-        openMediaPreview(asset);
-      });
+      prevBtn.textContent = t('previewBtn');
+      prevBtn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openMediaPreview(asset); });
       actionsBar.append(prevBtn);
     }
 
-    // Stream Assembly or Copy FFmpeg Command
     if (isStream) {
+      const inspectBtn = document.createElement('button');
+      inspectBtn.type = 'button';
+      inspectBtn.className = 'btn-card-action';
+      inspectBtn.textContent = t('inspectBtn');
+      inspectBtn.disabled = !state.companion.connected;
+      inspectBtn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); inspectStream(asset); });
+      actionsBar.append(inspectBtn);
+
       if (state.companion.connected) {
         const assembleBtn = document.createElement('button');
         assembleBtn.type = 'button';
         assembleBtn.className = 'btn-card-action btn-assemble';
         assembleBtn.textContent = t('assembleWithCompanion');
         assembleBtn.addEventListener('click', e => {
-          e.preventDefault();
-          e.stopPropagation();
-          assembleStreamViaCompanion(asset);
+          e.preventDefault(); e.stopPropagation(); assembleStreamViaCompanion(asset);
         });
         actionsBar.append(assembleBtn);
       } else {
@@ -314,15 +465,10 @@ function render() {
         ffmpegBtn.className = 'btn-card-action';
         ffmpegBtn.textContent = t('copyFfmpeg');
         ffmpegBtn.addEventListener('click', async e => {
-          e.preventDefault();
-          e.stopPropagation();
+          e.preventDefault(); e.stopPropagation();
           const cmd = generateFfmpegCommand(asset.url, safeDownloadName(asset, 1, state.page?.domain));
-          try {
-            await navigator.clipboard.writeText(cmd);
-            notice(t('ffmpegCopied'));
-          } catch (_) {
-            notice(t('copyFail'), true);
-          }
+          try { await navigator.clipboard.writeText(cmd); notice(t('ffmpegCopied')); }
+          catch (_) { notice(t('copyFail'), true); }
         });
         actionsBar.append(ffmpegBtn);
       }
@@ -347,6 +493,7 @@ function applyScannedPage(result) {
     typeof a?.url === 'string' && /^https?:\/\//i.test(a.url));
   state.selected.clear();
   ui.pageHost.textContent = result.domain || '—';
+  state.liveBaselineCount = state.assets.length;
   render();
   if (result.truncated) notice(state.lang === 'ar' ? 'تم عرض أول 600 نتيجة.' : 'Showing the first 600 results.');
 }
@@ -371,6 +518,7 @@ async function scan() {
     state.tab = tab;
     const response = await chrome.scripting.executeScript({target: {tabId: tab.id}, func: scanPageAssets});
     applyScannedPage(response?.[0]?.result);
+    if (state.liveWatch) armLiveWatch(tab.id);
   } catch (error) {
     state.page = null;
     state.assets = [];
@@ -384,6 +532,46 @@ async function scan() {
   }
 }
 
+/* ------------------------------------------------------------ live watch ---
+ * Media on modern pages often appears only after the user interacts. A bounded
+ * MutationObserver inside the page counts media-bearing nodes and reports back;
+ * it never auto-downloads and never leaves a timer running after the tab closes.
+ * -------------------------------------------------------------------------- */
+
+function armLiveWatch(tabId) {
+  chrome.scripting.executeScript({target: {tabId}, func: installLiveMediaWatch, args: [state.lang]})
+    .catch(() => { /* tab may have navigated away */ });
+}
+
+function installLiveMediaWatch(lang) {
+  if (window.__knouxGrabflowWatch) return {installed: true};
+  const countMedia = () => document.querySelectorAll(
+    'video, audio, source, img, object[data], embed[src], a[href]').length;
+  let baseline = countMedia();
+  let pending = 0;
+  let timer = null;
+  const observer = new MutationObserver(() => {
+    const now = countMedia();
+    if (now !== baseline) {
+      pending = Math.max(pending, Math.abs(now - baseline));
+      baseline = now;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        try {
+          chrome.runtime.sendMessage({type: 'watch:changed', count: pending});
+        } catch (_) { /* popup already closed */ }
+        pending = 0;
+      }, 900);
+    }
+  });
+  observer.observe(document.documentElement, {childList: true, subtree: true, attributes: true,
+    attributeFilter: ['src', 'href', 'data-src', 'poster']});
+  window.__knouxGrabflowWatch = {observer, disconnect: () => { observer.disconnect(); clearTimeout(timer); }};
+  return {installed: true};
+}
+
+/* ---------------------------------------------------------------- downloads */
+
 function selectedAssets() { return state.assets.filter(asset => state.selected.has(asset.url)); }
 
 async function downloadSelected() {
@@ -395,338 +583,338 @@ async function downloadSelected() {
   if (chosen.length > 30) { notice(t('max'), true); return; }
   setBusy(true);
   let success = 0, failures = 0;
-  const ids = [];
   try {
     for (let index = 0; index < chosen.length; index++) {
       const asset = chosen[index];
       notice(t('downloading', index + 1, chosen.length));
-      try {
-        const filename = safeDownloadName(asset, index + 1, state.page?.domain);
-        const id = await chrome.downloads.download({
-          url: asset.url, filename, conflictAction: 'uniquify', saveAs: false
-        });
-        if (typeof id === 'number') {
-          success++;
-          ids.push(id);
-          recordDownloadJob(id, {
-            id, url: asset.url, filename, domain: state.page?.domain,
-            format: asset.format || asset.type, state: 'in_progress', bytesReceived: 0, totalBytes: 0
-          });
-        } else {
-          failures++;
-        }
-      } catch (_) { failures++; }
-    }
-    if (ids.length) {
-      try {
-        const stored = await chrome.storage.local.get(['downloadRuns']);
-        const prior = Array.isArray(stored.downloadRuns) ? stored.downloadRuns : [];
-        const merged = Array.from(new Set([...prior, ...ids])).slice(-50);
-        await chrome.storage.local.set({downloadRuns: merged});
-      } catch (_) { /* optional */ }
+      let result = state.workerReady
+        ? await sendToWorker('download:start', {asset, index: index + 1, domain: state.page?.domain})
+        : null;
+      if (!result) {
+        armPopupDownloadFallback();
+        result = await startDownloadLocal(asset, index + 1, state.page?.domain);
+      }
+      if (result && result.ok) success++;
+      else failures++;
     }
     const suffix = skipped ? ` · ${t('streamSkipped', skipped)}` : '';
     notice(t('done', success, failures) + suffix, failures > 0 || skipped > 0);
-    if (ids.length) await refreshDownloadStatus(ids);
+    renderDownloads();
+    renderDownloadStatus();
   } finally { setBusy(false); }
 }
 
-function assembleStreamViaCompanion(asset) {
-  if (!chrome.runtime?.sendNativeMessage) {
-    notice(t('streamNotDirect'), true);
+async function assembleStreamViaCompanion(asset) {
+  if (!state.companion.connected) { notice(t('inspectUnavailable'), true); return; }
+  const result = await sendToWorker('companion:assemble',
+    {asset, index: state.jobs.size + 1, domain: state.page?.domain});
+  if (result && result.ok) {
+    notice(t('assemblyStarted'));
+    renderDownloads();
+  } else {
+    notice((result && result.error) || t('assemblyFailed'), true);
+  }
+}
+
+async function inspectStream(asset) {
+  if (!state.companion.connected) { notice(t('inspectUnavailable'), true); return; }
+  notice(t('inspecting'));
+  const result = await sendToWorker('companion:probe', {url: asset.url});
+  if (!result || result.status !== 'ok') {
+    notice((result && result.error) || t('inspectFailed'), true);
     return;
   }
-  const jobId = `companion-${Date.now()}`;
-  const filename = safeDownloadName(asset, state.activeDownloads.size + 1, state.page?.domain);
-  recordDownloadJob(jobId, {
-    id: jobId,
-    url: asset.url,
-    filename,
-    domain: state.page?.domain,
-    format: asset.format,
-    state: 'in_progress',
-    bytesReceived: 0,
-    totalBytes: 0,
-    isCompanion: true
-  });
-  notice(t('assemblyStarted'));
-  try {
-    chrome.runtime.sendNativeMessage('com.knoux.grabflow.companion', {
-      action: 'assemble', url: asset.url, output: filename, jobId
-    }, resp => {
-      if (chrome.runtime.lastError || !resp || resp.status !== 'complete') {
-        const err = chrome.runtime.lastError?.message || resp?.error || t('assemblyFailed');
-        recordDownloadJob(jobId, { state: 'failed', error: err });
-        notice(err, true);
-      } else {
-        recordDownloadJob(jobId, {
-          state: 'complete',
-          bytesReceived: resp.bytes,
-          fileSize: resp.bytes,
-          filename: resp.output || filename
-        });
-        notice(t('assemblySuccess'));
-      }
-    });
-  } catch (err) {
-    recordDownloadJob(jobId, { state: 'failed', error: err.message });
-    notice(err.message, true);
+  openMediaPreview(Object.assign({}, asset, {
+    probed: true, durationSeconds: result.durationSeconds, bitRate: result.bitRate,
+    sizeBytes: result.sizeBytes, videoTracks: result.videoTracks,
+    audioTracks: result.audioTracks, drmSuspected: result.drmSuspected
+  }));
+}
+
+/* ------------------------------------------------------- manager rendering --
+ * One card per tracked job: browser downloads and companion assemblies share
+ * the same list, so the user sees one truth about what is happening.
+ * -------------------------------------------------------------------------- */
+
+function jobPercent(job) {
+  if (job.state === 'complete') return 100;
+  if (Number.isFinite(job.percent)) return Math.max(0, Math.min(100, job.percent));
+  if (job.totalBytes > 0) return Math.min(100, Math.round((job.bytesReceived / job.totalBytes) * 100));
+  return job.state === 'in_progress' ? 12 : 0;
+}
+
+function stateLabel(job) {
+  switch (job.state) {
+    case 'complete': return t('stateComplete');
+    case 'interrupted': return t('stateInterrupted');
+    case 'failed': return t('stateFailed');
+    case 'cancelled': return t('stateCancelled');
+    case 'pending': return t('statePending');
+    default: return t('stateInProgress');
   }
 }
 
-function recordDownloadJob(id, details) {
-  state.activeDownloads.set(id, { ...(state.activeDownloads.get(id) || {}), ...details });
-  renderDownloads();
-}
-
-/* Download Manager rendering */
 function renderDownloads() {
   if (!ui.managerList) return;
-  const items = Array.from(state.activeDownloads.values());
+  const items = [...state.jobs.values()].sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0));
   ui.managerCount.textContent = items.length;
   if (!items.length) {
-    ui.managerList.innerHTML = `<div class="empty-downloads"><div class="empty-orbit">▽</div><div>${t('noDownloads')}</div></div>`;
+    ui.managerList.replaceChildren();
+    const emptyBlock = document.createElement('div');
+    emptyBlock.className = 'empty-downloads';
+    emptyBlock.innerHTML = '<div class="empty-orbit">▽</div>';
+    const label = document.createElement('div');
+    label.textContent = t('noDownloads');
+    emptyBlock.append(label);
+    ui.managerList.append(emptyBlock);
     return;
   }
   const frag = document.createDocumentFragment();
-  for (const item of [...items].reverse()) {
+  for (const item of items.slice().reverse()) {
     const card = document.createElement('div');
-    card.className = 'dl-card';
+    card.className = `dl-card ${item.kind || 'chrome'}`;
 
     const top = document.createElement('div');
     top.className = 'dl-card-top';
-
     const name = document.createElement('div');
     name.className = 'dl-card-name';
-    name.textContent = item.filename ? item.filename.split('/').pop().split('\\').pop() : (item.url ? item.url.split('/').pop() : 'Download');
-    name.title = item.url;
-
+    name.textContent = (item.filename || item.url || 'Download').split(/[\\/]/).pop();
+    name.title = item.url || '';
     const badge = document.createElement('span');
-    const st = item.state || 'in_progress';
-    badge.className = `dl-state-badge ${st}`;
-    badge.textContent = st === 'complete' ? t('stateComplete')
-      : (st === 'interrupted' ? t('stateInterrupted') : (st === 'failed' ? t('stateFailed') : t('stateInProgress')));
-
-    top.append(name, badge);
+    badge.className = `dl-state-badge ${item.state || 'in_progress'}`;
+    badge.textContent = stateLabel(item);
+    const kind = document.createElement('span');
+    kind.className = 'dl-kind';
+    kind.textContent = item.kind === 'companion' ? 'FFMPEG' : 'BROWSER';
+    top.append(name, kind, badge);
     card.append(top);
 
     const progress = document.createElement('div');
     progress.className = 'dl-card-progress';
     const bar = document.createElement('div');
     bar.className = 'dl-card-progress-bar';
-    const pct = item.totalBytes > 0 ? Math.min(100, Math.round((item.bytesReceived / item.totalBytes) * 100))
-      : (st === 'complete' ? 100 : 30);
-    bar.style.width = `${pct}%`;
+    bar.style.width = `${jobPercent(item)}%`;
     progress.append(bar);
     card.append(progress);
 
     const meta = document.createElement('div');
     meta.className = 'dl-card-meta';
-
     const sizeInfo = document.createElement('span');
-    if (st === 'complete') {
-      sizeInfo.textContent = formatBytes(item.fileSize || item.bytesReceived);
+    sizeInfo.className = 'dl-size';
+    if (item.state === 'complete') {
+      sizeInfo.textContent = `${formatBytes(item.fileSize || item.bytesReceived)} · ${jobPercent(item)}%`;
     } else if (item.totalBytes > 0) {
-      sizeInfo.textContent = `${formatBytes(item.bytesReceived)} / ${formatBytes(item.totalBytes)} (${pct}%)`;
-    } else if (item.bytesReceived > 0) {
-      sizeInfo.textContent = formatBytes(item.bytesReceived);
+      sizeInfo.textContent = `${t('percentOf', item.bytesReceived, item.totalBytes)} (${jobPercent(item)}%)`;
+    } else if (item.kind === 'companion' && item.bytesReceived > 0) {
+      sizeInfo.textContent = `${formatBytes(item.bytesReceived)} · ${jobPercent(item)}%`;
     } else {
       sizeInfo.textContent = item.domain || '';
     }
 
     const actions = document.createElement('div');
     actions.className = 'dl-actions';
+    const button = (label, handler, disabled) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'dl-action-btn';
+      b.textContent = label;
+      if (disabled) b.disabled = true; else b.addEventListener('click', handler);
+      return b;
+    };
 
-    if (st === 'complete') {
-      const openBtn = document.createElement('button');
-      openBtn.type = 'button';
-      openBtn.className = 'dl-action-btn';
-      openBtn.textContent = t('openFile');
-      openBtn.addEventListener('click', () => {
-        if (typeof item.id === 'number' && chrome.downloads?.open) chrome.downloads.open(item.id);
-      });
-      const showBtn = document.createElement('button');
-      showBtn.type = 'button';
-      showBtn.className = 'dl-action-btn';
-      showBtn.textContent = t('showFolder');
-      showBtn.addEventListener('click', () => {
-        if (typeof item.id === 'number' && chrome.downloads?.show) chrome.downloads.show(item.id);
-      });
-      if (typeof item.id === 'number') actions.append(openBtn, showBtn);
-    } else if (st === 'interrupted' || st === 'failed') {
-      const retryBtn = document.createElement('button');
-      retryBtn.type = 'button';
-      retryBtn.className = 'dl-action-btn';
-      retryBtn.textContent = t('retry');
-      retryBtn.addEventListener('click', () => {
-        if (item.isCompanion) {
-          assembleStreamViaCompanion({url: item.url, format: item.format, name: item.filename});
-        } else {
-          chrome.downloads?.download({url: item.url, filename: item.filename, conflictAction: 'uniquify'});
-        }
-      });
-      actions.append(retryBtn);
-    } else if (st === 'in_progress') {
-      const cancelBtn = document.createElement('button');
-      cancelBtn.type = 'button';
-      cancelBtn.className = 'dl-action-btn';
-      cancelBtn.textContent = item.isCompanion ? t('cancelUnavailable') : t('cancel');
-      if (item.isCompanion) {
-        // sendNativeMessage creates a new host process; it cannot cancel the old one.
-        cancelBtn.disabled = true;
-        cancelBtn.title = 'Native assembly cancellation needs a persistent host session.';
-      } else {
-        cancelBtn.addEventListener('click', () => {
-          if (typeof item.id === 'number' && chrome.downloads?.cancel) {
-            chrome.downloads.cancel(item.id);
-          }
-        });
+    if (item.state === 'complete') {
+      if (typeof item.id === 'number') {
+        actions.append(
+          button(t('openFile'), () => sendToWorker('download:open', {id: item.id})),
+          button(t('showFolder'), () => sendToWorker('download:show', {id: item.id})));
       }
-      actions.append(cancelBtn);
+    } else if (['interrupted', 'failed', 'cancelled'].includes(item.state)) {
+      actions.append(button(t('retry'), () => retryJob(item)));
+    } else if (['in_progress', 'pending'].includes(item.state)) {
+      if (item.kind === 'companion') {
+        actions.append(button(t('cancel'), () => sendToWorker('companion:cancel', {jobId: item.jobId})));
+      } else if (typeof item.id === 'number') {
+        actions.append(button(t('cancel'), () => sendToWorker('download:cancel', {id: item.id})));
+      }
     }
 
     meta.append(sizeInfo, actions);
     card.append(meta);
+
+    if (item.error || item.nestedAudit) {
+      const detail = document.createElement('div');
+      detail.className = 'dl-detail';
+      const parts = [];
+      if (item.error) parts.push(String(item.error).slice(0, 180));
+      if (item.nestedAudit) {
+        parts.push(item.nestedAudit.status === 'passed'
+          ? t('auditPassed', item.nestedAudit.checked) : t('auditUnavailable'));
+      }
+      detail.textContent = parts.join(' · ');
+      card.append(detail);
+    }
     frag.append(card);
   }
   ui.managerList.replaceChildren(frag);
 }
 
-async function refreshDownloadStatus(ids) {
-  if (!Array.isArray(ids) || !ids.length || !chrome.downloads?.search) return;
-  const items = await Promise.all(ids.map(id => chrome.downloads.search({id}).then(x => x?.[0] || null).catch(() => null)));
-  for (const item of items) {
-    if (item && item.id) {
-      state.activeDownloads.set(item.id, {
-        id: item.id,
-        url: item.url,
-        filename: item.filename,
-        state: item.state,
-        bytesReceived: item.bytesReceived,
-        totalBytes: item.totalBytes,
-        fileSize: item.fileSize,
-        error: item.error
-      });
-    }
+async function retryJob(item) {
+  if (item.kind === 'companion') {
+    await assembleStreamViaCompanion({url: item.url, format: item.format, name: item.filename});
+    return;
   }
-  const totals = summarizeDownloads(items);
-  ui.downloadStatus.hidden = false;
-  ui.downloadStatus.textContent = t('downloadProgress', totals.complete, totals.running, totals.interrupted + totals.missing);
+  let result = state.workerReady
+    ? await sendToWorker('download:start', {
+        asset: {url: item.url, type: item.format === 'image' ? 'image' : 'video',
+                format: item.format, name: item.filename}, index: 1, domain: item.domain})
+    : null;
+  if (!result) {
+    armPopupDownloadFallback();
+    result = await startDownloadLocal(
+      {url: item.url, type: item.format === 'image' ? 'image' : 'video',
+       format: item.format, name: item.filename}, 1, item.domain);
+  }
+  if (!result || !result.ok) notice((result && result.error) || t('blocked'), true);
   renderDownloads();
 }
 
-async function restoreDownloadStatus() {
-  try {
-    const data = await chrome.storage.local.get(['downloadRuns']);
-    if (Array.isArray(data.downloadRuns)) {
-      await refreshDownloadStatus(data.downloadRuns);
-    }
-  } catch (_) { /* download history optional */ }
+function renderDownloadStatus() {
+  if (!ui.downloadStatus) return;
+  const items = [...state.jobs.values()];
+  if (!items.length) { ui.downloadStatus.hidden = true; return; }
+  const counts = {complete: 0, running: 0, failed: 0};
+  for (const job of items) {
+    if (job.state === 'complete') counts.complete++;
+    else if (['failed', 'interrupted', 'cancelled'].includes(job.state)) counts.failed++;
+    else counts.running++;
+  }
+  ui.downloadStatus.hidden = false;
+  ui.downloadStatus.textContent = t('downloadProgress', counts.complete, counts.running, counts.failed);
 }
 
-async function checkNativeCompanion() {
-  state.companion.connected = false;
-  state.companion.missingTools = false;
-  if (!chrome.runtime?.sendNativeMessage) {
-    if (ui.companionStatus) ui.companionStatus.textContent = t('companionMissing');
-    return;
-  }
-  try {
-    chrome.runtime.sendNativeMessage('com.knoux.grabflow.companion', {action:'ping'}, resp => {
-      const reachable = !chrome.runtime.lastError && resp && resp.action === 'pong';
-      state.companion.missingTools = !!reachable && !(resp.ffmpegAvailable && resp.ffprobeAvailable);
-      state.companion.connected = !!reachable && !state.companion.missingTools;
-      state.companion.version = reachable ? resp.version : null;
-      if (ui.companionStatus) {
-        ui.companionStatus.classList.toggle('connected', state.companion.connected);
-        ui.companionStatus.textContent = state.companion.connected
-          ? t('companionConnected') : state.companion.missingTools
-            ? t('companionToolsMissing') : t('companionMissing');
-      }
-      if (state.page) render();
-    });
-  } catch (_) {
-    state.companion.connected = false;
-    state.companion.missingTools = false;
-    if (ui.companionStatus) ui.companionStatus.textContent = t('companionMissing');
-  }
-}
+/* -------------------------------------------------------------- preview UI */
 
-/* Media Preview Drawer/Modal */
 function openMediaPreview(asset) {
   if (!ui.previewModal || !asset) return;
   state.previewingAsset = asset;
   ui.previewContent.replaceChildren();
+  if (ui.previewDetails) ui.previewDetails.replaceChildren();
   ui.previewTitle.textContent = `${t('mediaPreview')} — ${asset.type.toUpperCase()}`;
   ui.previewMeta.textContent = `${asset.name} (${asset.resolution || asset.format || asset.type})`;
+
+  const showFailure = () => {
+    ui.previewContent.replaceChildren();
+    const block = document.createElement('div');
+    block.className = 'empty';
+    block.innerHTML = '<div class="empty-orbit">⚠</div>';
+    const label = document.createElement('div');
+    label.textContent = t('corsNotice');
+    block.append(label);
+    ui.previewContent.append(block);
+  };
 
   if (asset.type === 'video') {
     const video = document.createElement('video');
     video.controls = true;
-    video.autoplay = true;
     video.playsInline = true;
+    video.preload = 'metadata';   // never stream a whole file into popup memory
     video.src = asset.url;
     if (asset.poster) video.poster = asset.poster;
-    video.onerror = () => {
-      ui.previewContent.innerHTML = `<div class="empty"><div style="font-size:20px;">⚠️</div><div>${t('corsNotice')}</div></div>`;
-    };
+    video.onerror = showFailure;
     ui.previewContent.append(video);
   } else if (asset.type === 'audio') {
     const audio = document.createElement('audio');
     audio.controls = true;
-    audio.autoplay = true;
+    audio.preload = 'metadata';
     audio.src = asset.url;
-    audio.onerror = () => {
-      ui.previewContent.innerHTML = `<div class="empty"><div style="font-size:20px;">⚠️</div><div>${t('corsNotice')}</div></div>`;
-    };
+    audio.onerror = showFailure;
     ui.previewContent.append(audio);
   } else if (asset.type === 'image') {
     const img = document.createElement('img');
     img.src = asset.url;
     img.alt = asset.name;
-    img.onerror = () => {
-      ui.previewContent.innerHTML = `<div class="empty"><div style="font-size:20px;">⚠️</div><div>${t('corsNotice')}</div></div>`;
-    };
+    img.loading = 'lazy';
+    img.onerror = showFailure;
     ui.previewContent.append(img);
   }
 
+  if (ui.previewDetails) renderPreviewDetails(asset);
+  if (ui.previewInspectBtn) {
+    ui.previewInspectBtn.hidden = !(asset.type === 'video' && ['hls', 'dash'].includes(asset.format));
+  }
   ui.previewActionBtn.disabled = !isDownloadableAsset(asset);
   ui.previewModal.hidden = false;
+}
+
+function renderPreviewDetails(asset) {
+  const rows = [];
+  const add = (label, value) => { if (value !== null && value !== undefined && value !== '') rows.push([label, String(value)]); };
+  add(t('inspectDuration'), asset.duration ? `${asset.duration}s`
+    : (asset.durationSeconds ? `${asset.durationSeconds.toFixed(1)}s` : null));
+  add(t('inspectBitrate'), asset.bitRate ? `${Math.round(asset.bitRate / 1000)} kbps` : asset.bitrate);
+  add('Resolution', asset.resolution);
+  add('Codec', asset.codec);
+  add(t('inspectSize'), asset.sizeBytes ? formatBytes(asset.sizeBytes) : null);
+  if (asset.videoTracks?.length) {
+    add(t('inspectTracks'), asset.videoTracks.map(v => `${v.width}×${v.height} ${v.codec}`).join(', ')
+      + (asset.audioTracks?.length ? ` · ${asset.audioTracks.map(a => a.codec).join(', ')}` : ''));
+  }
+  if (asset.drmSuspected) add('DRM', t('inspectDrm'));
+  ui.previewDetails.replaceChildren(...rows.map(([label, value]) => {
+    const row = document.createElement('div');
+    row.className = 'preview-detail-row';
+    const k = document.createElement('span'); k.className = 'k'; k.textContent = label;
+    const v = document.createElement('span'); v.className = 'v'; v.textContent = value;
+    row.append(k, v);
+    return row;
+  }));
 }
 
 function closeMediaPreview() {
   if (!ui.previewModal) return;
   ui.previewModal.hidden = true;
   ui.previewContent.replaceChildren();
+  if (ui.previewDetails) ui.previewDetails.replaceChildren();
   state.previewingAsset = null;
 }
 
-if (chrome.downloads?.onChanged?.addListener) {
-  chrome.downloads.onChanged.addListener(delta => {
-    if (state.activeDownloads.has(delta.id)) {
-      const cur = state.activeDownloads.get(delta.id);
-      if (delta.state) cur.state = delta.state.current;
-      if (delta.error) cur.error = delta.error.current;
-      renderDownloads();
-    }
-    chrome.storage.local.get(['downloadRuns']).then(data => refreshDownloadStatus(data.downloadRuns)).catch(() => {});
-  });
-}
+/* ---------------------------------------------------------------- wiring -- */
 
-// Event Listeners
 ui.managerToggleBtn?.addEventListener('click', () => {
   state.view = state.view === 'scanner' ? 'manager' : 'scanner';
   ui.scannerView.hidden = state.view === 'manager';
   ui.managerView.hidden = state.view !== 'manager';
   ui.managerToggleBtn.classList.toggle('active', state.view === 'manager');
-  if (state.view === 'manager') renderDownloads();
+  ui.managerToggleBtn.setAttribute('aria-pressed', String(state.view === 'manager'));
+  if (state.view === 'manager') {
+    renderDownloads();
+    // Pull the authoritative list in case events fired while the view was closed.
+    sendToWorker('jobs:list').then(reply => {
+      if (!reply || !Array.isArray(reply.jobs)) return;
+      state.jobs.clear();
+      for (const job of reply.jobs) state.jobs.set(job.key, job);
+      if (reply.companion) state.companion = reply.companion;
+      renderDownloads();
+      renderDownloadStatus();
+      renderCompanion();
+    });
+  }
 });
 
 ui.clearHistoryBtn?.addEventListener('click', async () => {
-  state.activeDownloads.clear();
-  try { await chrome.storage.local.set({downloadRuns: []}); } catch (_) {}
+  await sendToWorker('jobs:clear');
+  state.jobs.clear();
   ui.downloadStatus.hidden = true;
   renderDownloads();
+});
+
+ui.watchToggleBtn?.addEventListener('click', () => {
+  state.liveWatch = !state.liveWatch;
+  translate();
+  if (state.liveWatch && state.tab?.id) armLiveWatch(state.tab.id);
+  else chrome.scripting.executeScript({target: {tabId: state.tab?.id}, func: () => {
+    if (window.__knouxGrabflowWatch) window.__knouxGrabflowWatch.disconnect();
+  }}).catch(() => {});
 });
 
 ui.langBtn.addEventListener('click', async () => {
@@ -741,31 +929,25 @@ ui.sortMode.addEventListener('change', render);
 ui.largeImages.addEventListener('change', render);
 
 ui.csvBtn?.addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(exportAssetsCsv(visibleAssets()));
-    notice(t('csvCopied'));
-  } catch (_) { notice(t('copyFail'), true); }
+  try { await navigator.clipboard.writeText(exportAssetsCsv(visibleAssets())); notice(t('csvCopied')); }
+  catch (_) { notice(t('copyFail'), true); }
 });
 
 ui.exportJsonBtn?.addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(exportAssetsJson(visibleAssets()));
-    notice(t('jsonCopied'));
-  } catch (_) { notice(t('copyFail'), true); }
+  try { await navigator.clipboard.writeText(exportAssetsJson(visibleAssets())); notice(t('jsonCopied')); }
+  catch (_) { notice(t('copyFail'), true); }
 });
 
 ui.previewCloseBtn?.addEventListener('click', closeMediaPreview);
 ui.previewBackdrop?.addEventListener('click', closeMediaPreview);
-
 ui.previewCopyBtn?.addEventListener('click', async () => {
-  if (state.previewingAsset?.url) {
-    try {
-      await navigator.clipboard.writeText(state.previewingAsset.url);
-      notice(t('copied'));
-    } catch (_) { notice(t('copyFail'), true); }
-  }
+  if (!state.previewingAsset?.url) return;
+  try { await navigator.clipboard.writeText(state.previewingAsset.url); notice(t('copied')); }
+  catch (_) { notice(t('copyFail'), true); }
 });
-
+ui.previewInspectBtn?.addEventListener('click', () => {
+  if (state.previewingAsset) inspectStream(state.previewingAsset);
+});
 ui.previewActionBtn?.addEventListener('click', () => {
   if (state.previewingAsset && isDownloadableAsset(state.previewingAsset)) {
     const asset = state.previewingAsset;
@@ -779,11 +961,11 @@ ui.previewActionBtn?.addEventListener('click', () => {
 
 document.querySelectorAll('[data-filter]').forEach(tab => tab.addEventListener('click', () => {
   state.filter = tab.dataset.filter;
-  document.querySelectorAll('[data-filter]').forEach(t => {
-    const isAct = t.dataset.filter === state.filter;
-    t.classList.toggle('active', isAct);
-    t.setAttribute('aria-pressed', String(isAct));
-    t.setAttribute('aria-selected', String(isAct));
+  document.querySelectorAll('[data-filter]').forEach(node => {
+    const isActive = node.dataset.filter === state.filter;
+    node.classList.toggle('active', isActive);
+    node.setAttribute('aria-pressed', String(isActive));
+    node.setAttribute('aria-selected', String(isActive));
   });
   render();
 }));
@@ -807,12 +989,35 @@ ui.copyBtn.addEventListener('click', async () => {
 
 ui.downloadBtn.addEventListener('click', downloadSelected);
 
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !ui.previewModal?.hidden) closeMediaPreview();
+});
+
+// Worker events that are not job state.
+chrome.runtime.onMessage?.addListener(message => {
+  if (message && message.type === 'watch:changed') {
+    notice(t('watchChanged', message.count || 1));
+  }
+});
+
 (async () => {
+  // The badge shows the version the browser actually loaded, not a literal in HTML.
+  if (ui.buildTag && chrome.runtime?.getManifest) {
+    ui.buildTag.textContent = `FULL ${chrome.runtime.getManifest().version}`;
+  }
   try {
     const settings = await chrome.storage.local.get(['language']);
     state.lang = settings.language === 'ar' || settings.language === 'en'
       ? settings.language : (navigator.language.toLowerCase().startsWith('ar') ? 'ar' : 'en');
   } catch (_) { state.lang = 'en'; }
+  connectWorker();
   translate();
-  await Promise.all([scan(), restoreDownloadStatus(), checkNativeCompanion()]);
+  await scan();
+  // Ask the worker for a truthful companion handshake rather than assuming one.
+  const companionState = await sendToWorker('companion:ping');
+  if (companionState && !companionState.error) {
+    state.companion = companionState;
+    renderCompanion();
+    render();
+  }
 })();

@@ -168,23 +168,41 @@ def audit_playlist(playlist_url: str, allow_local: bool) -> None:
           f'{len(findings["hosts"])} host(s); all public.', flush=True)
 
 
+SAFE_OUTPUT_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9._() -]{0,118}\.(?:mp4|mkv)', re.IGNORECASE)
+
+
+def safe_output_path(output) -> str:
+    """Rebuild the destination from admitted components instead of forwarding it.
+
+    A negative check ("reject if it starts with a dash") still passes the original
+    string through. This does the opposite: the filename must match an allowlist
+    and the directory must already exist, and the value handed to the child is
+    reconstructed from those two parts.
+    """
+    candidate = output if isinstance(output, Path) else Path(str(output))
+    name = candidate.name
+    if not SAFE_OUTPUT_NAME.fullmatch(name):
+        raise ValueError('Output name must be a plain file name ending in .mp4 or .mkv')
+    parent = candidate.parent.resolve()
+    if not parent.is_dir():
+        raise ValueError('Output directory does not exist')
+    return str(parent / name)
+
+
 def run_assembly(ffmpeg: str, playlist_url: str, output: Path):
     """The single place a child process is started, from checked values only.
 
-    The argument vector is assembled here, next to the checks that justify each
-    dynamic element, rather than being handed in from elsewhere: every value that
-    is not a literal in this function has been admitted by a check on the line
-    above it.
+    Every dynamic element is either admitted by a positive allowlist or rebuilt
+    from admitted parts, next to the call that uses it.
     """
     target = canonical_playlist_url(playlist_url)
-    executable = Path(ffmpeg).expanduser().resolve()
+    executable = Path(ffmpeg).expanduser()
     if not executable.is_absolute() or not executable.is_file():
         raise ValueError('Refusing to run FFmpeg from a non-absolute or missing path')
-    destination = str(output)
-    if not destination or destination.startswith('-'):
-        raise ValueError('Refusing an option-like output path')
+    executable_path = str(executable.resolve())
+    destination = safe_output_path(output)
     argv = assert_argv_safe([
-        str(executable),
+        executable_path,
         '-hide_banner', '-nostdin', '-loglevel', 'warning',
         '-protocol_whitelist', PROTOCOL_WHITELIST,
         '-allowed_extensions', PLAYLIST_EXTENSIONS,

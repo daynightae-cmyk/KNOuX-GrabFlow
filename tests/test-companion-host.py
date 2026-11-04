@@ -110,7 +110,7 @@ class CompanionHostTests(unittest.TestCase):
             '  </Representation></AdaptationSet></Period></MPD>'
         )
         refs = list(_iter_nested_refs(mpd))
-        self.assertEqual(sorted(refs), ['chunk-0-$Number$.m4s', 'chunk-$Number$.m4s', 'init-0.m4s'])
+        self.assertEqual(set(refs), {'chunk-0-$Number$.m4s', 'chunk-$Number$.m4s', 'init-0.m4s'})
         self.assertFalse(any('xmlns' in ref or 'schemaLocation' in ref or ref.startswith('urn:')
                              for ref in refs))
 

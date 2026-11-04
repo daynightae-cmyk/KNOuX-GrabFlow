@@ -427,7 +427,7 @@ def audit_nested_urls(text: str, base_url: str, allow_local: bool = False):
 
 
 DASH_REF_ATTR = re.compile(
-    r'(?<![:\w-])(?:sourceurl|baseurl|initialization|indexrange)\s*=\s*"([^"]+)"',
+    r'(?<![:\w-])(?:sourceurl|baseurl|initialization|indexrange|media)\s*=\s*"([^"]+)"',
     re.IGNORECASE)
 DASH_BASEURL_ELEMENT = re.compile(r'<BaseURL>\s*([^<]+?)\s*</BaseURL>', re.IGNORECASE)
 XML_TAG = re.compile(r'<[^>]{0,8192}>')

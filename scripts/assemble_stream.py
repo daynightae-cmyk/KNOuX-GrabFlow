@@ -169,12 +169,30 @@ def audit_playlist(playlist_url: str, allow_local: bool) -> None:
 
 
 def run_assembly(ffmpeg: str, playlist_url: str, output: Path):
-    """The single place a child process is started, from checked values only."""
-    safe_url = canonical_playlist_url(playlist_url)
-    executable = Path(ffmpeg)
+    """The single place a child process is started, from checked values only.
+
+    The argument vector is assembled here, next to the checks that justify each
+    dynamic element, rather than being handed in from elsewhere: every value that
+    is not a literal in this function has been admitted by a check on the line
+    above it.
+    """
+    target = canonical_playlist_url(playlist_url)
+    executable = Path(ffmpeg).expanduser().resolve()
     if not executable.is_absolute() or not executable.is_file():
         raise ValueError('Refusing to run FFmpeg from a non-absolute or missing path')
-    argv = assert_argv_safe(make_command(str(executable), safe_url, output))
+    destination = str(output)
+    if not destination or destination.startswith('-'):
+        raise ValueError('Refusing an option-like output path')
+    argv = assert_argv_safe([
+        str(executable),
+        '-hide_banner', '-nostdin', '-loglevel', 'warning',
+        '-protocol_whitelist', PROTOCOL_WHITELIST,
+        '-allowed_extensions', PLAYLIST_EXTENSIONS,
+        '-i', target,
+        '-c', 'copy',
+        '-movflags', '+faststart',
+        '-n', destination,
+    ])
     return subprocess.run(argv, check=False, timeout=ASSEMBLY_TIMEOUT, shell=False)
 
 

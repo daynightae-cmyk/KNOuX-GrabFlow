@@ -229,7 +229,7 @@ def find_binaries():
 
 # --- Pinned, redirect-aware manifest fetch -----------------------------------
 
-def _pinned_connect(scheme, hostname, port, address, timeout):
+def _pinned_connect(scheme, hostname, port, address, timeout, allow_local=False):
     """Open a socket to an already-validated address, keeping full TLS verification.
 
     The TCP connection dials the audited IP while SNI and certificate validation
@@ -239,6 +239,12 @@ def _pinned_connect(scheme, hostname, port, address, timeout):
     gets the socket: if a future change ever relaxed either one, this raises
     instead of silently accepting a certificate issued to some other host.
     """
+    # The address was validated when it was resolved, but it is checked again at
+    # the point of use: the value that reaches the socket is the one that was
+    # cleared here, so a future refactor cannot pass an unchecked address in.
+    if not allow_local and not _address_is_public(address):
+        raise MediaPolicyError(
+            f'SSRF protection: refusing to dial non-public address {address}')
     raw = socket.create_connection((address, port), timeout=timeout)
     if scheme != 'https':
         return raw, None
@@ -353,7 +359,8 @@ def fetch_manifest(url: str, allow_local: bool = False, timeout: int = FETCH_TIM
         last_error = None
         for address in addresses:
             try:
-                sock, _ = _pinned_connect(parsed.scheme, parsed.hostname, port, address, timeout)
+                sock, _ = _pinned_connect(parsed.scheme, parsed.hostname, port, address,
+                                          timeout, allow_local=allow_local)
                 break
             except OSError as exc:
                 last_error = exc

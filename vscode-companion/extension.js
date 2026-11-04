@@ -8,10 +8,83 @@
  */
 
 const vscode = require('vscode');
+const fs = require('fs');
 const path = require('path');
 const { execFile, spawn } = require('child_process');
 
 let outputChannel = null;
+
+function isExecutableFile(candidate) {
+  if (!candidate || typeof candidate !== 'string') return false;
+  try {
+    return fs.statSync(candidate).isFile();
+  } catch (_) {
+    return false;
+  }
+}
+
+/** Newest Python under a Windows-style install root, if one exists. */
+function pythonUnderRoot(root) {
+  if (!root) return null;
+  try {
+    const versions = fs.readdirSync(root, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && /^Python3\d+$/i.test(entry.name))
+      .map(entry => path.join(root, entry.name, 'python.exe'))
+      .sort()
+      .reverse();
+    return versions.find(isExecutableFile) || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Resolve an interpreter or tool to an absolute path.
+ *
+ * A bare name is looked up on the host first, so the child never has to inherit
+ * the caller's PATH to find it. If nothing absolute exists we refuse rather than
+ * spawning something that only resolves through whatever PATH happens to be set,
+ * which is how a planted binary earlier in PATH gets executed.
+ */
+function resolveTool(configured, candidates, label) {
+  if (configured && path.isAbsolute(configured) && isExecutableFile(configured)) {
+    return configured;
+  }
+  for (const candidate of candidates) {
+    if (isExecutableFile(candidate)) return candidate;
+  }
+  const viaPath = (process.env.PATH || '').split(path.delimiter)
+    .filter(Boolean)
+    .map(directory => path.join(directory, configured || ''))
+    .find(isExecutableFile);
+  if (viaPath) return viaPath;
+  throw new Error(
+    `${label} could not be located as an absolute path. Set knouxGrabflow.pythonPath / ` +
+    `knouxGrabflow.ffprobePath to an absolute file in Settings.`);
+}
+
+function pythonCandidates() {
+  if (process.platform === 'win32') {
+    const roots = [process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs', 'Python'),
+                   process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'Python'),
+                   process.env['ProgramFiles(x86)'] && path.join(process.env['ProgramFiles(x86)'], 'Python')];
+    return roots.map(pythonUnderRoot).filter(Boolean);
+  }
+  return ['/usr/bin/python3', '/usr/local/bin/python3', '/opt/homebrew/bin/python3'];
+}
+
+/**
+ * Environment for a child process: a fixed PATH containing only the tool's own
+ * directory, plus the handful of variables Python and FFmpeg genuinely need.
+ */
+function childEnvironment(executablePath) {
+  const environment = { PATH: path.dirname(executablePath) };
+  for (const key of ['SYSTEMROOT', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'HOME', 'USERPROFILE',
+                     'LANG', 'LC_ALL', 'PYTHONIOENCODING']) {
+    if (process.env[key]) environment[key] = process.env[key];
+  }
+  return environment;
+}
 
 function getChannel() {
   if (!outputChannel) {
@@ -41,13 +114,22 @@ function activate(context) {
     channel.appendLine(`Detected Format: ${isHls ? 'HLS (m3u8)' : (isDash ? 'DASH (mpd)' : 'Direct Video/Audio')}`);
 
     const config = vscode.workspace.getConfiguration('knouxGrabflow');
-    const ffprobe = config.get('ffprobePath', 'ffprobe');
+    const configuredProbe = config.get('ffprobePath', 'ffprobe');
+    let ffprobe;
+    try {
+      ffprobe = resolveTool(configuredProbe,
+        [path.join(path.dirname(configuredProbe), 'ffprobe.exe')], 'ffprobe');
+    } catch (resolveError) {
+      channel.appendLine(`[PROBE ERROR] ${resolveError.message}`);
+      vscode.window.showErrorMessage(resolveError.message);
+      return;
+    }
 
     execFile(ffprobe, [
       '-hide_banner', '-loglevel', 'error',
       '-show_entries', 'stream=index,codec_name,codec_type,width,height,bit_rate:format=duration,format_name',
       '-of', 'json', trimmed
-    ], { timeout: 15000 }, (error, stdout, stderr) => {
+    ], { timeout: 15000, env: childEnvironment(ffprobe) }, (error, stdout, stderr) => {
       if (error) {
         channel.appendLine(`[PROBE ERROR] ${stderr || error.message}`);
         vscode.window.showWarningMessage(`Could not probe stream with ffprobe. Format classified as ${isHls ? 'HLS' : (isDash ? 'DASH' : 'Direct')}.`);
@@ -83,7 +165,22 @@ function activate(context) {
     channel.show(true);
     channel.appendLine(`\n[ASSEMBLE] Launching companion assembly: ${url.trim()} -> ${outputFilename.trim()}`);
 
-    const proc = spawn('python', [scriptPath, '--url', url.trim(), '--output', outputFilename.trim()]);
+    const config = vscode.workspace.getConfiguration('knouxGrabflow');
+    let python;
+    try {
+      python = resolveTool(config.get('pythonPath', ''), pythonCandidates(), 'Python');
+    } catch (resolveError) {
+      channel.appendLine(`[ASSEMBLE ERROR] ${resolveError.message}`);
+      vscode.window.showErrorMessage(resolveError.message);
+      return;
+    }
+
+    const proc = spawn(python, [scriptPath, '--url', url.trim(), '--output', outputFilename.trim()],
+      { env: childEnvironment(python), windowsHide: true });
+    proc.on('error', spawnError => {
+      channel.appendLine(`[ASSEMBLE ERROR] ${spawnError.message}`);
+      vscode.window.showErrorMessage(`Could not start the companion: ${spawnError.message}`);
+    });
     proc.stdout.on('data', data => channel.append(data.toString()));
     proc.stderr.on('data', data => channel.append(data.toString()));
     proc.on('close', code => {

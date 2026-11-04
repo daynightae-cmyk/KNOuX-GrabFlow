@@ -1,10 +1,9 @@
 'use strict';
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const vm = require('node:vm');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
-const scanner = fs.readFileSync(path.join(root, 'scan-page.js'), 'utf8');
+const {scanPageAssets} = require(path.join(root, 'scan-page.js'));
 let passed = 0;
 function makeNode(attrs = {}, extra = {}) {
   return {
@@ -44,7 +43,24 @@ function run({imgs=[], videos=[], audios=[], pictures=[], metas=[], links=[], cs
     // because Chrome stops recording at ~250 entries by default.
     ...(bufferSize === false ? {} : {setResourceTimingBufferSize: size => { bufferSizeSeen = size; }})
   };
-  return vm.runInNewContext(`${scanner}\nscanPageAssets()`, {document, location: {hostname, href: url}, URL, Set, String, RegExp, performance});
+  // The scanner reads `document`, `location` and `performance` as free variables.
+  // Supplying them as real globals lets the shipped module run unmodified, with no
+  // dynamic evaluation of a source string anywhere in the test path.
+  const saved = {
+    document: globalThis.document,
+    location: globalThis.location,
+    performance: globalThis.performance
+  };
+  globalThis.document = document;
+  globalThis.location = {hostname, href: url};
+  globalThis.performance = performance;
+  try {
+    return scanPageAssets();
+  } finally {
+    globalThis.document = saved.document;
+    globalThis.location = saved.location;
+    globalThis.performance = saved.performance;
+  }
 }
 let bufferSizeSeen = null;
 function test(name, fn) { fn(); passed++; console.log('PASS', name); }

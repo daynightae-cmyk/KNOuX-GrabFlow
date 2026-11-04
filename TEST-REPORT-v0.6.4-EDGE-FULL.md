@@ -1,8 +1,36 @@
-# KNOuX GrabFlow v0.6.3 — Test Report (Full Edition, Microsoft Edge)
+# KNOuX GrabFlow v0.6.4 — Test Report (Full Edition, Microsoft Edge)
 
 Executed on the development device on 2026-11-04. Every number below is copied from command
 output, not restated from a plan. Nothing in this report is a claim about the store, and no
 "Full Release" is asserted here.
+
+## Version and artifact provenance
+
+Two builds of this work exist and must not be confused:
+
+| Build | Source | Manifest | Artifact SHA-256 | Status |
+|---|---|---|---|---|
+| Engineering build | merged as `dc7b0fd` | 0.6.3 | `b8aa2aad20eb61a023a72b2c310a4a157f612d63d14bd0b6c0171b7e1b3cdb5c` (164 471 B) | merged; superseded |
+| This report | `release/grabflow-v0.6.3-closure` | **0.6.4** | recorded in the Packaging section below | release candidate |
+
+An earlier report also referenced `b855ee03faadef818b86f86c198a60f8fef0e5ccb917226b6b8e467e12fdfccd`
+(163 547 B). That was an interim build produced before the last round of Sonar-driven source
+changes; it is neither of the two above.
+
+The version was bumped to **0.6.4** precisely because source changed *after* the 0.6.3 artifacts
+had been built and hashed. Keeping the 0.6.3 label would attach new content to an already-recorded
+artifact whose bytes no longer match. Published version semantics are never reused here.
+
+## Package scope — what the ZIP does and does not contain
+
+`KNOuX-GrabFlow-CHROME-v0.6.4.zip` and `KNOuX-GrabFlow-EDGE-v0.6.4.zip` contain **the browser
+extension only** — 12 files: manifest, popup HTML/CSS/JS, the scanner, asset utilities, the
+service worker, three icons and two locale files.
+
+They do **not** contain the native companion host, FFmpeg or FFprobe. Direct media downloads work
+from the ZIP alone. HLS/DASH assembly and stream inspection require the separately installed
+companion described in `COMPANION-INSTALL.md`, with FFmpeg/FFprobe present. A green native-host
+test in this report is evidence about that separate installation, not about the ZIP.
 
 ## Device and toolchain
 
@@ -164,19 +192,39 @@ asset, so the assembled file was written as **`master.m3u8.mp4`**. The playlist 
 dropped before the media suffix, and `tests/test-companion-host.py` covers it - the rerun produced
 `master.mp4`.
 
-## Packaging
+## Packaging (v0.6.4 release candidate)
 
 `python scripts/package.py`:
 
 ```
-PACKAGED D:\KNOUX-Workspace\KNOuX-GrabFlow-CHROME-v0.6.3.zip (163547 bytes, 12 files)
-PACKAGED D:\KNOUX-Workspace\KNOuX-GrabFlow-EDGE-v0.6.3.zip   (163547 bytes, 12 files)
-VERIFIED KNOuX-GrabFlow-CHROME-v0.6.3.zip b855ee03faadef818b86f86c198a60f8fef0e5ccb917226b6b8e467e12fdfccd
-VERIFIED KNOuX-GrabFlow-EDGE-v0.6.3.zip   b855ee03faadef818b86f86c198a60f8fef0e5ccb917226b6b8e467e12fdfccd
+PACKAGED D:\KNOUX-Workspace\KNOuX-GrabFlow-CHROME-v0.6.4.zip (165445 bytes, 12 files)
+PACKAGED D:\KNOUX-Workspace\KNOuX-GrabFlow-EDGE-v0.6.4.zip   (165445 bytes, 12 files)
+VERIFIED KNOuX-GrabFlow-CHROME-v0.6.4.zip 6e9a2b7c99681a39a23e44961c454a6cb77f8b7ace24af8f20d620aea082bf26
+VERIFIED KNOuX-GrabFlow-EDGE-v0.6.4.zip   6e9a2b7c99681a39a23e44961c454a6cb77f8b7ace24af8f20d620aea082bf26
 ```
 
-The script now refuses to package unless `default_locale` is declared while locales ship and the
-service worker is registered, and re-reads its own checksum file to confirm every digest.
+The two archives are byte-identical because both browsers consume the same Manifest V3 payload;
+they are packaged separately only so a store submission and a QA artifact are never confused.
+
+Artifact audit performed on the Edge zip:
+
+| Check | Result |
+|---|---|
+| ZIP integrity (`zipfile.testzip`) | PASS |
+| File count and set | 12 files, exactly the expected list, nothing else |
+| Manifest V3 | PASS |
+| Declared permissions | `activeTab`, `scripting`, `downloads`, `storage`, `nativeMessaging` |
+| `host_permissions` | absent |
+| Background service worker | `background.js` |
+| Locales | `_locales/en`, `_locales/ar` |
+| Icons | 16 / 48 / 128 |
+| SHA-256 re-read and verified | PASS |
+| Secrets, `.env`, `.pem`, `node_modules`, `.git/`, machine paths | none present |
+| Corresponds to the tested source SHA | the closure commit that produced it; see the final delivery |
+
+`RELEASE_CHECKSUMS-v0.6.4.sha256` records both digests and the script re-reads and re-verifies it
+before exiting. `RELEASE_CHECKSUMS-v0.6.3.sha256` is left in place as the record of the superseded
+merged build.
 
 ## Defects found and fixed during this testing
 
@@ -263,14 +311,94 @@ Edge failed with `ReferenceError: Cannot access 'badge' before initialization` a
 matrix went red. Renamed to `makeBadge`; both suites pass again. This is the case for executing
 the tests rather than trusting a green unit suite.
 
+## SonarCloud: what was still red on `main`, and why
+
+The merged engineering build `dc7b0fd` did **not** pass the main-branch gate, even though its
+pull-request check had. That is a real discrepancy, not a reporting artefact: read from the API,
+
+```
+new_security_rating  actual=4 (D)  required A   -> ERROR
+new_reliability_rating actual=3 (C) required A  -> ERROR
+new_maintainability_rating actual=1 (A)         -> OK
+new_security_hotspots_reviewed 100%             -> OK
+```
+
+The main-branch leak period covered the whole v0.6.3 diff plus pre-existing files, which surfaced
+seven issue-class findings — four bugs, three vulnerabilities — that the pull-request analysis had
+not attributed to new code:
+
+| Rule | Where | What it was | Fix |
+|---|---|---|---|
+| `javascript:S9383` ×2 | `popup.js` | Floating promises from async click handlers and a bare `downloadSelected()` call | Every fire-and-forget action goes through one `runAction()` wrapper that reports rejection instead of leaving it unhandled |
+| `javascript:S7727` ×2 | `popup.js` | `isDownloadableAsset` passed straight to `.some()` / `.filter()`, so index and array were fed into a one-argument predicate | Explicit arrow wrappers |
+| `javascript:S4036` | `vscode-companion/extension.js` | Child process inherited the caller's `PATH`; a planted `python.exe` / `ffprobe.exe` earlier in `PATH` would have been executed | Tools are resolved to absolute paths; the child gets a fixed `PATH` containing only the tool's own directory, plus the handful of variables it actually needs. `pythonPath` setting added |
+| `pythonsecurity:S8705` | `scripts/assemble_stream.py` | `--url` / `--ffmpeg` flowed from argparse into `subprocess` with no last-moment check | `assert_argv_safe()` rejects non-strings, empties, control characters and option-like URLs immediately before launch; `shell=False` is explicit; input is re-checked to be http(s) |
+| `javascript:S1523` | `tests/test-scanner.cjs` | `vm.runInNewContext` evaluated the scanner source as a string | The scanner is now a real CommonJS export; the test requires the module and injects the DOM globals it reads. No dynamic evaluation remains anywhere in the test path |
+
+`scripts/assemble_stream.py` also grew `prepare()` to separate validation from execution and keep
+`main()` readable.
+
+## Two findings resolved as reviewed false positives — disclosed
+
+After the fixes above, two `pythonsecurity` findings remained, both on code written to prevent the
+class they were flagged for. Three structural attempts were made before the review:
+
+| Finding | What was tried | Outcome |
+|---|---|---|
+| `S8701` on `run_assembly` | allowlisted URL regex, canonical re-serialisation, `assert_argv_safe`, explicit `shell=False`, argv assembled in place beside each check | still flagged |
+| `S8703` on `_pinned_connect` | address re-check immediately before `create_connection`, policy-aware, plus the existing TLS hostname assertion | still flagged |
+
+Both are recorded on SonarCloud as **false positive** with a written justification on the issue
+itself, not suppressed silently and not resolved by lowering a threshold:
+
+- `run_assembly` builds its argument vector from literals plus three values, each admitted by a
+  check on the line above it. There is no shell. Option injection needs a URL beginning with `-`
+  (excluded) or a smuggled newline (excluded). Covered by tests.
+- `_pinned_connect` **is** the SSRF defence: it dials an address that `resolve_public_addresses`
+  already validated against `ipaddress.is_global`, re-checks it at the socket, and asserts TLS
+  hostname verification afterwards. The "taint" the rule follows is the user-selected media URL,
+  which is the product's entire purpose.
+
+The quality gate on the pull request after this review:
+
+```
+status: OK
+  new_security_rating            = 1 (A)
+  new_reliability_rating         = 1 (A)
+  new_maintainability_rating     = 1 (A)
+  new_duplicated_lines_density   = 0.0
+  new_security_hotspots_reviewed = 100%
+```
+
+## A real bug the CLI audit exposed
+
+Wiring the nested-reference audit into the command-line assembler made the DASH matrix fail, and
+the reason was not the audit: the shared extractor scanned manifests **line by line**. XML
+attributes may legally span lines, so a wrapped `<MPD ...>` element yielded
+`xmlns:xlink="http://www.w3.org/1999/xlink"` and
+`xsi:schemaLocation="urn:mpeg:DASH:schema:MPD:2011 http://..."` as if they were nested media
+references. A perfectly ordinary ffmpeg-generated MPD was then rejected as an SSRF attempt — a
+false positive that broke a supported format.
+
+DASH is now scanned by tag with a negative lookbehind on the attribute name, and values containing
+whitespace or a `urn:` / `data:` / `blob:` prefix are skipped as declarations rather than rejected.
+`SegmentTemplate@media` was added to the attribute set at the same time: a manifest describing its
+segments only through `media` would previously have audited as "zero references", which reads as
+clean when it is really unexamined. Two regression tests cover both.
+
 ## Not verified, stated plainly
 
-- Microsoft Partner Center enrolment, submission and review ID: untouched.
+- Microsoft Partner Center enrolment, submission and review ID: untouched. No store page was
+  opened, no account was used, nothing was submitted. `STORE_SUBMISSION = NOT SUBMITTED`,
+  `STORE_APPROVAL = NOT VERIFIED`.
+- A **third-party public CDN** stream. The live Edge→native→FFmpeg assembly ran against a local
+  fixture server with loopback deliberately relaxed for that host, which the host reported as
+  `policy=test-relaxed`. The shipping default still blocks private addresses and that refusal is
+  asserted in the protocol suite. External-CDN behaviour is therefore not covered.
 - The physical toolbar click and the `activeTab` grant it provides. Automation cannot press a
   toolbar button, so `scan()` in Edge returned no assets and the test fell back to running the
-  shipped `scanPageAssets` function inside the page. Detection is verified against real markup;
-  the grant path is not.
-- Edge browser→native→Edge live assembly on a real device. The companion is not registered here.
+  shipped `scanPageAssets` function inside the page. Detection is verified against real markup
+  through the shipped code; the permission-grant path itself is UNVERIFIED.
 - Large-file behaviour beyond a 24-second / 1.5 MB fixture. The ceilings are unit-exercised, not
   stress-tested against multi-gigabyte streams.
 - Any accessibility claim: contrast, focus order and screen-reader behaviour were not measured.

@@ -88,6 +88,39 @@ class CompanionHostTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(resolve_safe_output(name).name, expected)
 
+    def test_nested_refs_ignore_namespaces_and_drm_declarations(self):
+        """A wrapped DASH manifest must not read declarations as media refs.
+
+        Regression: a line-oriented scan yielded `xmlns:xlink="..."` and
+        `xsi:schemaLocation="urn:mpeg... http://..."` as nested references, so a
+        perfectly ordinary ffmpeg MPD was rejected as an SSRF attempt.
+        """
+        from companion_host import _iter_nested_refs
+        mpd = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<MPD xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"\n'
+            '     xmlns="urn:mpeg:dash:schema:mpd:2011"\n'
+            '     xmlns:xlink="http://www.w3.org/1999/xlink"\n'
+            '     xsi:schemaLocation="urn:mpeg:DASH:schema:MPD:2011 http://standards.example/x.xsd"\n'
+            '     mediaPresentationDuration="PT3.0S">\n'
+            '  <Period><AdaptationSet contentType="video"><Representation id="0">\n'
+            '      <BaseURL>chunk-$Number$.m4s</BaseURL>\n'
+            '      <SegmentTemplate initialization="init-0.m4s" media="chunk-0-$Number$.m4s"/>\n'
+            '      <ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/>\n'
+            '  </Representation></AdaptationSet></Period></MPD>'
+        )
+        refs = list(_iter_nested_refs(mpd))
+        self.assertEqual(set(refs), {'chunk-0-$Number$.m4s', 'chunk-$Number$.m4s', 'init-0.m4s'})
+        self.assertFalse(any('xmlns' in ref or 'schemaLocation' in ref or ref.startswith('urn:')
+                             for ref in refs))
+
+    def test_nested_refs_still_cover_hls_keys_and_segments(self):
+        from companion_host import _iter_nested_refs
+        playlist = ('#EXTM3U\n'
+                    '#EXT-X-KEY:METHOD=AES-128,URI="https://keys.example/k"\n'
+                    '#EXTINF:2.0,\nseg1.ts\n#EXT-X-ENDLIST\n')
+        self.assertEqual(sorted(_iter_nested_refs(playlist)), ['https://keys.example/k', 'seg1.ts'])
+
     def test_resolve_safe_output(self):
         p = resolve_safe_output('my_stream.mp4')
         self.assertTrue(p.is_absolute())

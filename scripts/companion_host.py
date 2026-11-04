@@ -40,7 +40,7 @@ import threading
 import time
 from urllib.parse import urljoin, urlsplit
 
-VERSION = "0.6.3"
+VERSION = "0.6.4"
 HOST_NAME = "com.knoux.grabflow.companion"
 
 # --- Hard ceilings. Every one of these is enforced, not advisory. -----------
@@ -229,7 +229,7 @@ def find_binaries():
 
 # --- Pinned, redirect-aware manifest fetch -----------------------------------
 
-def _pinned_connect(scheme, hostname, port, address, timeout):
+def _pinned_connect(scheme, hostname, port, address, timeout, allow_local=False):
     """Open a socket to an already-validated address, keeping full TLS verification.
 
     The TCP connection dials the audited IP while SNI and certificate validation
@@ -239,6 +239,12 @@ def _pinned_connect(scheme, hostname, port, address, timeout):
     gets the socket: if a future change ever relaxed either one, this raises
     instead of silently accepting a certificate issued to some other host.
     """
+    # The address was validated when it was resolved, but it is checked again at
+    # the point of use: the value that reaches the socket is the one that was
+    # cleared here, so a future refactor cannot pass an unchecked address in.
+    if not allow_local and not _address_is_public(address):
+        raise MediaPolicyError(
+            f'SSRF protection: refusing to dial non-public address {address}')
     raw = socket.create_connection((address, port), timeout=timeout)
     if scheme != 'https':
         return raw, None
@@ -353,7 +359,8 @@ def fetch_manifest(url: str, allow_local: bool = False, timeout: int = FETCH_TIM
         last_error = None
         for address in addresses:
             try:
-                sock, _ = _pinned_connect(parsed.scheme, parsed.hostname, port, address, timeout)
+                sock, _ = _pinned_connect(parsed.scheme, parsed.hostname, port, address,
+                                          timeout, allow_local=allow_local)
                 break
             except OSError as exc:
                 last_error = exc
@@ -426,25 +433,59 @@ def audit_nested_urls(text: str, base_url: str, allow_local: bool = False):
     return findings
 
 
+DASH_REF_ATTR = re.compile(
+    r'(?<![:\w-])(?:sourceurl|baseurl|initialization|indexrange|media)\s*=\s*"([^"]+)"',
+    re.IGNORECASE)
+DASH_BASEURL_ELEMENT = re.compile(r'<BaseURL>\s*([^<]+?)\s*</BaseURL>', re.IGNORECASE)
+XML_TAG = re.compile(r'<[^>]{0,8192}>')
+
+
+def _looks_like_media_ref(value: str) -> bool:
+    """Reject values that are declarations rather than resources.
+
+    A DASH attribute can legally span lines, and schemaLocation carries a
+    space-separated pair, so a raw line scan produces things like
+    ``urn:mpeg:DASH:schema:MPD:2011 http://...``. Those are namespaces, not
+    media, and reporting them as an SSRF attempt would be a false alarm.
+    """
+    if not value:
+        return False
+    if any(char.isspace() for char in value):
+        return False
+    return not value.lower().startswith(('urn:', 'data:', 'blob:'))
+
+
 def _iter_nested_refs(text: str):
-    """Yield candidate nested resource strings from an HLS or DASH document."""
+    """Yield candidate nested resource strings from an HLS or DASH document.
+
+    DASH is scanned by tag, not by line: XML attributes may span lines, and a
+    line-oriented scan mistakes wrapped declarations for resource references.
+    """
+    if '<' in text and re.search(r'<(?:\w+:)?(?:MPD|Period|AdaptationSet|Representation)', text):
+        for tag in XML_TAG.finditer(text):
+            body = tag.group(0)
+            for match in DASH_REF_ATTR.finditer(body):
+                if _looks_like_media_ref(match.group(1)):
+                    yield match.group(1)
+        for match in DASH_BASEURL_ELEMENT.finditer(text):
+            if _looks_like_media_ref(match.group(1)):
+                yield match.group(1)
+        return
+
     for line in text.splitlines():
         stripped = line.strip()
         if not stripped:
             continue
         if stripped.startswith('#'):
             for match in re.finditer(r'URI="([^"]+)"|SOURCEURL="([^"]+)"', stripped, re.IGNORECASE):
-                yield next(group for group in match.groups() if group)
+                candidate = next(group for group in match.groups() if group)
+                if _looks_like_media_ref(candidate):
+                    yield candidate
             continue
         if stripped.startswith('<'):
-            for match in re.finditer(
-                r'(?:sourceurl|baseurl|initialization|indexrange)\s*=\s*"([^"]+)"',
-                stripped, re.IGNORECASE):
-                yield match.group(1)
-            for match in re.finditer(r'<BaseURL>\s*([^<]+?)\s*</BaseURL>', stripped, re.IGNORECASE):
-                yield match.group(1)
             continue
-        yield stripped
+        if _looks_like_media_ref(stripped):
+            yield stripped
 
 
 def build_assemble_command(ffmpeg: str, url: str, out_path: Path) -> list:

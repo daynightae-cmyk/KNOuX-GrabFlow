@@ -322,7 +322,7 @@ function setBusy(busy) {
 
 function renderButtons() {
   const hasSelection = state.selected.size > 0;
-  const hasDownloadable = selectedAssets().some(isDownloadableAsset);
+  const hasDownloadable = selectedAssets().some(asset => isDownloadableAsset(asset));
   ui.copyBtn.disabled = state.busy || !hasSelection;
   ui.downloadBtn.disabled = state.busy || !hasDownloadable;
   ui.selectedLabel.textContent = t('selected', state.selected.size);
@@ -332,6 +332,19 @@ function streamFormatLabel(format) {
   if (format === 'hls') return 'HLS · M3U8';
   if (format === 'dash') return 'DASH · MPD';
   return format ? format.toUpperCase() : 'VIDEO FILE';
+}
+
+/**
+ * Run an asynchronous UI action without leaving its promise floating.
+ * A rejection here would otherwise be an unhandled rejection: invisible in the
+ * popup's own error surface and, in a service worker, enough to kill it.
+ */
+function runAction(action, failureMessage) {
+  Promise.resolve()
+    .then(action)
+    .catch(() => {
+      if (failureMessage) notice(failureMessage, true);
+    });
 }
 
 function makeBadge(className, text, title) {
@@ -588,7 +601,7 @@ function selectedAssets() { return state.assets.filter(asset => state.selected.h
 
 async function downloadSelected() {
   const allSelected = selectedAssets();
-  const chosen = allSelected.filter(isDownloadableAsset);
+  const chosen = allSelected.filter(asset => isDownloadableAsset(asset));
   const skipped = allSelected.length - chosen.length;
   if (!chosen.length && skipped) { notice(t('streamNotDirect'), true); return; }
   if (!chosen.length) { notice(t('selectFirst'), true); return; }
@@ -740,16 +753,20 @@ function renderDownloads() {
     if (item.state === 'complete') {
       if (typeof item.id === 'number') {
         actions.append(
-          button(t('openFile'), () => sendToWorker('download:open', {id: item.id})),
-          button(t('showFolder'), () => sendToWorker('download:show', {id: item.id})));
+          button(t('openFile'), () => runAction(
+            () => sendToWorker('download:open', {id: item.id}))),
+          button(t('showFolder'), () => runAction(
+            () => sendToWorker('download:show', {id: item.id}))));
       }
     } else if (['interrupted', 'failed', 'cancelled'].includes(item.state)) {
-      actions.append(button(t('retry'), () => retryJob(item)));
+      actions.append(button(t('retry'), () => runAction(() => retryJob(item), t('blocked'))));
     } else if (['in_progress', 'pending'].includes(item.state)) {
       if (item.kind === 'companion') {
-        actions.append(button(t('cancel'), () => sendToWorker('companion:cancel', {jobId: item.jobId})));
+        actions.append(button(t('cancel'), () => runAction(
+          () => sendToWorker('companion:cancel', {jobId: item.jobId}))));
       } else if (typeof item.id === 'number') {
-        actions.append(button(t('cancel'), () => sendToWorker('download:cancel', {id: item.id})));
+        actions.append(button(t('cancel'), () => runAction(
+          () => sendToWorker('download:cancel', {id: item.id}))));
       }
     }
 
@@ -944,7 +961,7 @@ ui.langBtn.addEventListener('click', async () => {
   try { await chrome.storage.local.set({language: state.lang}); } catch (_) { /* optional */ }
 });
 
-ui.refreshBtn.addEventListener('click', scan);
+ui.refreshBtn.addEventListener('click', () => runAction(scan, t('scanFail')));
 ui.search.addEventListener('input', render);
 ui.sortMode.addEventListener('change', render);
 ui.largeImages.addEventListener('change', render);
@@ -976,7 +993,7 @@ ui.previewActionBtn?.addEventListener('click', () => {
     state.selected.clear();
     state.selected.add(asset.url);
     render();
-    downloadSelected();
+    runAction(downloadSelected, t('blocked'));
   }
 });
 
@@ -1008,7 +1025,7 @@ ui.copyBtn.addEventListener('click', async () => {
   } catch (_) { notice(t('copyFail'), true); }
 });
 
-ui.downloadBtn.addEventListener('click', downloadSelected);
+ui.downloadBtn.addEventListener('click', () => runAction(downloadSelected, t('blocked')));
 
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && !ui.previewModal?.hidden) closeMediaPreview();

@@ -1,6 +1,11 @@
-# KNOuX GrabFlow v0.6.3 — Full Edition release notes
+# KNOuX GrabFlow v0.6.4 — Full Edition release notes
 
-**Status: engineering build with real Edge 156 runtime evidence. Not a store-approved release.**
+**Status: release candidate with real Edge 156 runtime evidence. Not a store-approved release.**
+
+Version 0.6.4 is the release-closure build. The v0.6.3 engineering build was merged as `dc7b0fd`
+and its artifacts were hashed; source then changed again to close the SonarCloud findings, so the
+version was bumped rather than reusing a label whose bytes no longer match. See
+`TEST-REPORT-v0.6.4-EDGE-FULL.md` for the exact artifact provenance.
 
 Baseline: `main` at `0f836e6a4e160b2b0f8f921a2ca9cc7bcd66c56f` (v0.6.1 tracked source).
 This branch reconciles the v0.6.2 Edge QA candidate into the tracked source and advances it.

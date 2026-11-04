@@ -25,7 +25,9 @@ from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(ROOT / "scripts"))
 import media_tools
+import companion_host as ch
 FFMPEG, FFPROBE = media_tools.pair()
 PYTHON = sys.executable
 
@@ -171,7 +173,7 @@ def main():
                 send(host, {"action": "ping", "requestId": "p1"})
                 pong, _ = reader.wait_for(lambda m: m.get("action") == "pong", 20, "pong")
                 assert pong["requestId"] == "p1"
-                assert pong["version"] == "0.6.3", pong["version"]
+                assert pong["version"] == ch.VERSION, (pong["version"], ch.VERSION)
                 assert "assemble-async" in pong["capabilities"]
                 assert pong["ffmpegAvailable"] and pong["ffprobeAvailable"], pong
                 print(f"[1] PING OK  version={pong['version']} policy={pong['localMediaPolicy']} "
@@ -264,9 +266,7 @@ def main():
                 host2.wait(timeout=10)
 
             # ---------- Nested SSRF, deterministic (mocked DNS) ----------------
-            sys.path.insert(0, str(ROOT / "scripts"))
             from unittest.mock import patch
-            import companion_host as ch
 
             def fake_getaddrinfo(host, port, **kwargs):
                 # *.example.test is public; internal.corp rebinds to loopback.

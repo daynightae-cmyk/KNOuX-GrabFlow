@@ -40,12 +40,17 @@
         "knouxGrabflow.ffmpegPath": {
           "type": "string",
           "default": "ffmpeg",
-          "description": "Custom path to local FFmpeg executable."
+          "description": "Absolute path to local FFmpeg executable."
         },
         "knouxGrabflow.ffprobePath": {
           "type": "string",
           "default": "ffprobe",
-          "description": "Custom path to local FFprobe executable."
+          "description": "Absolute path to local FFprobe. A bare name is resolved to an absolute path before use; the child process never inherits the caller's PATH."
+        },
+        "knouxGrabflow.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the Python interpreter used for companion assembly. Leave empty to use an auto-detected absolute path; a bare name is never resolved through an inherited PATH."
         }
       }
     }

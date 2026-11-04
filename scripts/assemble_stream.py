@@ -8,17 +8,19 @@ import argparse
 import ipaddress
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import socket
 import subprocess
 import sys
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 # Same confinement the native companion host applies, so the manual CLI cannot
 # become the weaker path to the same FFmpeg.
 PROTOCOL_WHITELIST = 'file,http,https,tcp,tls,crypto'
 PLAYLIST_EXTENSIONS = 'm3u8,ts,m4s,mp4,mkv,webv,vtt,srt,ssa,aac,ac3,eac3,mp3,opus'
+ASSEMBLY_TIMEOUT = 3600
 
 
 def validate(url: str, output: Path, *, allow_local=False):
@@ -95,6 +97,117 @@ def make_command(ffmpeg: str, url: str, output: Path):
             '-movflags', '+faststart', '-n', str(output)]
 
 
+# A playlist URL handed to FFmpeg is restricted to the characters that appear in
+# real manifests. Quotes, whitespace, backslashes and control characters are not
+# in the class, so an argument that tries to become something other than a URL
+# cannot pass.
+SAFE_PLAYLIST_URL = re.compile(r"^https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]{1,2048}$")
+
+
+def canonical_playlist_url(url: str) -> str:
+    """Return the URL re-serialised from a parsed, allowlisted form.
+
+    The value handed to the child process is constructed here from components
+    that have been checked individually, rather than forwarded from the command
+    line as-is.
+    """
+    if not isinstance(url, str) or not SAFE_PLAYLIST_URL.fullmatch(url):
+        raise ValueError('Playlist URL contains characters that are not permitted')
+    parts = urlsplit(url)
+    if parts.scheme not in ('http', 'https') or not parts.hostname:
+        raise ValueError('Playlist URL must be http(s) and carry a host')
+    if parts.username or parts.password:
+        raise ValueError('Refusing a playlist URL with embedded credentials')
+    rebuilt = urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query, parts.fragment))
+    if rebuilt != url:
+        raise ValueError('Playlist URL is not in canonical form')
+    return rebuilt
+
+
+def assert_argv_safe(argv) -> list:
+    """Refuse an argument vector that could be read as something it is not.
+
+    `--ffmpeg` and `--url` are operator input. Even though no shell is involved,
+    an option-like value or an embedded NUL would change what FFmpeg does rather
+    than what it reads, so both are rejected here, immediately before the child
+    process is started, rather than only at parse time.
+    """
+    if not isinstance(argv, (list, tuple)) or not argv:
+        raise ValueError('Refusing to run an empty command')
+    checked = []
+    for item in argv:
+        if not isinstance(item, str) or not item:
+            raise ValueError('Refusing a non-string or empty command argument')
+        if any(char in item for char in ('\x00', '\n', '\r')):
+            raise ValueError('Refusing a command argument containing control characters')
+        checked.append(item)
+    return checked
+
+
+def audit_playlist(playlist_url: str, allow_local: bool) -> None:
+    """Apply the same nested-reference audit the native companion host applies.
+
+    Without this the command-line path was the weaker route to the same FFmpeg:
+    a public playlist whose keys or segments point at a private address would
+    have gone unaudited. A policy breach raises; a transport limitation only
+    warns, because failing to fetch is not evidence of an attack.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from companion_host import (fetch_manifest, audit_nested_urls,
+                                MediaPolicyError, MediaFetchError)
+    try:
+        text, effective = fetch_manifest(playlist_url, allow_local=allow_local)
+        findings = audit_nested_urls(text, effective, allow_local=allow_local)
+    except MediaPolicyError:
+        raise
+    except (MediaFetchError, OSError, UnicodeDecodeError) as exc:
+        print(f'NOTE: nested-reference audit unavailable ({exc}); '
+              'FFmpeg protocol and extension whitelists still apply.', flush=True)
+        return
+    print(f'Audited {findings["checked"]} nested reference(s) across '
+          f'{len(findings["hosts"])} host(s); all public.', flush=True)
+
+
+def run_assembly(ffmpeg: str, playlist_url: str, output: Path):
+    """The single place a child process is started, from checked values only.
+
+    The argument vector is assembled here, next to the checks that justify each
+    dynamic element, rather than being handed in from elsewhere: every value that
+    is not a literal in this function has been admitted by a check on the line
+    above it.
+    """
+    target = canonical_playlist_url(playlist_url)
+    executable = Path(ffmpeg).expanduser().resolve()
+    if not executable.is_absolute() or not executable.is_file():
+        raise ValueError('Refusing to run FFmpeg from a non-absolute or missing path')
+    destination = str(output)
+    if not destination or destination.startswith('-'):
+        raise ValueError('Refusing an option-like output path')
+    argv = assert_argv_safe([
+        str(executable),
+        '-hide_banner', '-nostdin', '-loglevel', 'warning',
+        '-protocol_whitelist', PROTOCOL_WHITELIST,
+        '-allowed_extensions', PLAYLIST_EXTENSIONS,
+        '-i', target,
+        '-c', 'copy',
+        '-movflags', '+faststart',
+        '-n', destination,
+    ])
+    return subprocess.run(argv, check=False, timeout=ASSEMBLY_TIMEOUT, shell=False)
+
+
+def prepare(a):
+    """Validate every input and resolve the toolchain before anything runs."""
+    validate(a.url, a.output, allow_local=a.allow_local)
+    ffmpeg = find_ffmpeg(a.ffmpeg)
+    if not ffmpeg:
+        raise RuntimeError('FFmpeg is not installed or not on PATH')
+    ffmpeg = validate_executable(ffmpeg)
+    if not a.output.parent.exists():
+        raise ValueError('Output directory does not exist')
+    return ffmpeg
+
+
 def main():
     ap = argparse.ArgumentParser(description='Assemble authorized unprotected HLS/DASH stream into MP4/MKV.')
     ap.add_argument('--url', required=True, help='Direct playlist URL (.m3u8 or .mpd)')
@@ -104,19 +217,14 @@ def main():
     ap.add_argument('--dry-run', action='store_true', help='Print command without downloading')
     a = ap.parse_args()
     try:
-        validate(a.url, a.output, allow_local=a.allow_local)
-        ffmpeg = find_ffmpeg(a.ffmpeg)
-        if not ffmpeg:
-            raise RuntimeError('FFmpeg is not installed or not on PATH')
-        ffmpeg = validate_executable(ffmpeg)
-        if not a.output.parent.exists():
-            raise ValueError('Output directory does not exist')
-        command = make_command(ffmpeg, a.url, a.output)
+        ffmpeg = prepare(a)
         if a.dry_run:
-            print(json.dumps({'command': command, 'note': 'This URL is a playlist, not an MP4 file.'}, ensure_ascii=False))
+            print(json.dumps({'command': make_command(ffmpeg, a.url, a.output),
+                              'note': 'This URL is a playlist, not an MP4 file.'}, ensure_ascii=False))
             return 0
         print('Assembling stream into a single playable media file; no overwrite enabled.', flush=True)
-        result = subprocess.run(command, check=False, timeout=3600)
+        audit_playlist(a.url, a.allow_local)
+        result = run_assembly(ffmpeg, a.url, a.output)
         if result.returncode:
             print('FFmpeg failed (possibly unavailable segments, codec mismatch, DRM or network error).', flush=True)
             return result.returncode

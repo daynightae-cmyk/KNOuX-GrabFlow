@@ -1,13 +1,38 @@
 # KNOuX GrabFlow — Full Edition release notes
 
-**Status: upload-ready release candidate with real Edge 156 runtime evidence and a passing store-manifest validation. Not a store-approved release.**
+**Status: v0.6.7 remediation candidate with live Edge 156 Inspect/assembly evidence. Not a store-approved release.**
 
-Current version: **0.6.6**. Earlier candidates (0.6.4, 0.6.5) were superseded before any publication, each because a packaged file changed after the previous version had been hashed. Version labels are never reused for different bytes. The v0.6.3 engineering build was merged as `dc7b0fd`; source then changed to close the
-SonarCloud findings, then to fix the store manifest limits, so the version moved with the bytes
-each time. See `TEST-REPORT-EDGE-FULL.md` for the exact artifact provenance.
+Current version: **0.6.7**. Earlier candidates (0.6.4, 0.6.5, 0.6.6) were superseded before any
+publication, each because a packaged file changed after the previous version had been hashed.
+Version labels are never reused for different bytes. The v0.6.3 engineering build was merged as
+`dc7b0fd`; source then changed to close the SonarCloud findings, then to fix the store manifest
+limits, and now to correct two Inspector/audit presentation defects, so the version moved with
+the bytes each time. See `TEST-REPORT-EDGE-FULL.md` and `TEST-REPORT-v0.6.7.md` for provenance.
 
-Baseline: `main` at `0f836e6a4e160b2b0f8f921a2ca9cc7bcd66c56f` (v0.6.1 tracked source).
-This branch reconciles the v0.6.2 Edge QA candidate into the tracked source and advances it.
+Baseline for v0.6.7: `main` at `1eec5ae2b660f185ce451fdd1577fc02567fc8e3` (v0.6.6).
+The v0.6.7 work changes only metadata presentation, audit wording and their regression tests;
+download, assembly and security behaviour is preserved.
+
+## v0.6.7 — Inspector metadata truth and audit wording
+
+- **HLS/DASH size is no longer misreported.** ffprobe's `format.size` for a playlist is the
+  manifest file's size. The Inspector now calls it **Playlist file size** and shows
+  **Media size — Unknown until assembled or downloaded**, instead of presenting 345 B as the
+  media size. The real live test assembled a 1,042,878-byte, 16.04 s MP4 from that playlist.
+- **No invented zero bitrate.** A missing or zero `format.bit_rate` is **Not available**, never
+  `0 kbps`. Measured bitrate is still shown when ffprobe actually provides it.
+- **Duration, tracks, codecs and resolution are preserved** in both the real probe and the UI.
+- **Truthful nested-audit wording.** The UI now says
+  `Nested audit passed: 8 references checked` (Arabic:
+  `اكتمل التدقيق الداخلي: تم فحص 8 مرجعًا`) instead of claiming the references were
+  "verified public". This matters because a controlled test deliberately allows loopback.
+- **Policy unchanged.** SSRF, DNS-rebinding, redirect, private-address, nested-resource and
+  FFmpeg transport restrictions are still enforced; negative tests cover loopback, `file:` and
+  script references.
+- **New regressions:** `tests/test-metadata-truth.py`, real UI assertions in
+  `tests/test-ui-inmemory.py`, and live Inspect/audit assertions in
+  `tests/test-edge-native-e2e.py`. CI runs the new Python suite.
+
 
 ## What actually changed
 

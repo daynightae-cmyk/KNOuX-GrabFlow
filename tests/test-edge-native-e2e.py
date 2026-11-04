@@ -207,6 +207,27 @@ def main():
                         assets:[{type:'video', url, name:'Edge native assembly',
                                  source:'edge-native-qa', format:'hls', isPlaylist:true}],
                         truncated:false})""", stream_url)
+                    # v0.6.7 regression: the real Inspect path must distinguish
+                    # the playlist file from the media it describes, and must
+                    # not turn an unavailable bitrate into a measured "0 kbps".
+                    inspect = popup.evaluate(
+                        "() => document.querySelector('.btn-inspect')")
+                    assert inspect is not None, "Inspect button not rendered"
+                    popup.locator(".btn-inspect").click()
+                    popup.locator("#previewModal").wait_for(state="visible", timeout=60000)
+                    details = popup.locator("#previewDetails").inner_text()
+                    assert "Playlist file size" in details, details
+                    assert "Media size" in details, details
+                    assert "Unknown until assembled or downloaded" in details, details
+                    assert "Not available" in details, details
+                    assert "0 kbps" not in details, details
+                    assert "Reported size" not in details, details
+                    assert "Duration" in details and "Tracks" in details, details
+                    print(f"[3b] INSPECT_METADATA_TRUTH labels=playlist/media/unknown "
+                          f"details={details.replace(chr(10), ' | ')}")
+                    popup.screenshot(path=str(ROOT / "screenshots" / "edge-native-inspect-v067.png"))
+                    popup.locator("#previewCloseBtn").click()
+
                     assemble = popup.evaluate(
                         "() => document.querySelector('.btn-assemble')")
                     assert assemble is not None, "Assemble button not rendered"
@@ -234,6 +255,13 @@ def main():
                     assert final["state"] == "complete", (final, samples)
                     assert final["bytes"] > 50000, final
                     assert final["audit"]["status"] == "passed", final
+                    popup.wait_for_function(
+                        "() => (document.querySelector('.dl-card.companion')?.innerText || '')"
+                        ".includes('references checked')", timeout=20000)
+                    audit_text = popup.locator(".dl-card.companion").first.inner_text()
+                    assert "verified public" not in audit_text, audit_text
+                    print(f"[4b] AUDIT_WORDING_TRUTH text="
+                          f"{[line for line in audit_text.splitlines() if 'audit' in line.lower()]}")
                     progressed = [s for s in samples if s["percent"] and s["percent"] > 0]
                     print(f"[4] EDGE_LIVE_ASSEMBLY samples={len(samples)} "
                           f"with_progress={len(progressed)} bytes={final['bytes']} "

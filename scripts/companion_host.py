@@ -40,7 +40,7 @@ import threading
 import time
 from urllib.parse import urljoin, urlsplit
 
-VERSION = "0.6.6"
+VERSION = "0.6.7"
 HOST_NAME = "com.knoux.grabflow.companion"
 
 # --- Hard ceilings. Every one of these is enforced, not advisory. -----------
@@ -618,7 +618,7 @@ class CompanionHost:
             '-allowed_extensions', ALLOWED_PLAYLIST_EXTENSIONS,
             '-rw_timeout', '15000000',
             '-show_entries',
-            'format=duration,bit_rate,size:stream=index,codec_name,codec_type,width,height,bit_rate',
+            'format=format_name,duration,bit_rate,size:stream=index,codec_name,codec_type,width,height,bit_rate',
             '-of', 'json', url
         ]
         try:
@@ -639,9 +639,6 @@ class CompanionHost:
         resp.update({
             'status': 'ok',
             'data': data,
-            'durationSeconds': _as_float(fmt.get('duration')),
-            'bitRate': _as_int(fmt.get('bit_rate')),
-            'sizeBytes': _as_int(fmt.get('size')),
             'videoTracks': [{'width': _as_int(s.get('width')), 'height': _as_int(s.get('height')),
                              'codec': s.get('codec_name')} for s in streams
                             if s.get('codec_type') == 'video'],
@@ -651,6 +648,7 @@ class CompanionHost:
             # instead of letting FFmpeg fail with an opaque error later.
             'drmSuspected': _looks_protected(data),
         })
+        resp.update(_normalize_probe_metadata(fmt, url))
         return resp
 
     def handle_assemble(self, msg):
@@ -883,6 +881,58 @@ def _as_float(value):
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _is_stream_manifest(format_name: str, url: str) -> bool:
+    """True when ffprobe read a playlist, not the media it describes.
+
+    ffprobe reports the byte size of an HLS/DASH manifest in ``format.size``.
+    Presenting that number as the media size is wrong by orders of magnitude,
+    so the caller must label it as a playlist file size instead.
+    """
+    names = {part.strip().lower() for part in (format_name or '').split(',')}
+    if names & {'hls', 'applehttp', 'dash'}:
+        return True
+    return urlsplit(url).path.lower().endswith(('.m3u8', '.mpd'))
+
+
+def _normalize_probe_metadata(fmt, url: str):
+    """Return truthful, source-labelled probe metadata.
+
+    ``format.size`` and ``format.bit_rate`` describe whatever ffprobe opened.
+    For a playlist that is the manifest file, not the assembled programme, and
+    a missing/zero bitrate must never be rendered as a measured ``0 kbps``.
+    Unknown values stay ``None`` so the UI can say so explicitly.
+    """
+    fmt = fmt if isinstance(fmt, dict) else {}
+    manifest = _is_stream_manifest(str(fmt.get('format_name') or ''), url)
+    raw_size = _as_int(fmt.get('size'))
+    raw_bit_rate = _as_int(fmt.get('bit_rate'))
+    size_known = raw_size is not None and raw_size > 0
+    bitrate_known = raw_bit_rate is not None and raw_bit_rate > 0
+
+    if manifest:
+        size_source = 'manifest'
+        size_bytes = None
+        manifest_bytes = raw_size if size_known else None
+    elif size_known:
+        size_source = 'media'
+        size_bytes = raw_size
+        manifest_bytes = None
+    else:
+        size_source = 'unavailable'
+        size_bytes = None
+        manifest_bytes = None
+
+    return {
+        'formatName': str(fmt.get('format_name') or '') or None,
+        'durationSeconds': _as_float(fmt.get('duration')),
+        'bitRate': raw_bit_rate if (bitrate_known and not manifest) else None,
+        'bitRateSource': 'media' if (bitrate_known and not manifest) else 'unavailable',
+        'sizeBytes': size_bytes,
+        'manifestBytes': manifest_bytes,
+        'sizeSource': size_source,
+    }
 
 
 def _duration_from_playlist(text: str):

@@ -52,9 +52,9 @@ const dictionary = {
     inspectUnavailable: 'Inspection needs the native companion with FFmpeg installed.',
     inspectFailed: 'The companion could not read this stream.',
     inspectDuration: 'Duration', inspectBitrate: 'Bitrate', inspectTracks: 'Tracks',
-    inspectContainer: 'Container', inspectSize: 'Reported size', inspectHosts: 'Source hosts',
+    inspectContainer: 'Container', inspectSize: 'Media size', inspectHosts: 'Source hosts',
     inspectDrm: 'Encryption/DRM suspected — assembly will be refused.',
-    auditPassed: n => `Nested audit: ${n} references verified public`,
+    auditPassed: n => `Nested audit passed: ${n} references checked`,
     auditUnavailable: 'Nested audit unavailable — FFmpeg transport whitelist still enforced.',
     cancelledJob: 'Assembly cancelled.',
     watchOn: 'Live watch: ON', watchOff: 'Live watch: OFF',
@@ -103,9 +103,9 @@ const dictionary = {
     inspectUnavailable: 'الفحص يحتاج المساعد المحلي مع FFmpeg.',
     inspectFailed: 'لم يستطع المساعد قراءة هذا البث.',
     inspectDuration: 'المدة', inspectBitrate: 'معدل البيانات', inspectTracks: 'المسارات',
-    inspectContainer: 'الحاوية', inspectSize: 'الحجم المُبلغ', inspectHosts: 'مصادر الاستضافة',
+    inspectContainer: 'الحاوية', inspectSize: 'حجم الوسائط', inspectHosts: 'مصادر الاستضافة',
     inspectDrm: 'يُشتبه بتشفير/DRM — سيرفض التجميع.',
-    auditPassed: n => `تدقيق داخلي: ${n} مرجعًا تحققت أنها عامة`,
+    auditPassed: n => `اكتمل التدقيق الداخلي: تم فحص ${n} مرجعًا`,
     auditUnavailable: 'التدقيق الداخلي غير متاح — قائمة بروتوكولات FFmpeg ما زالت مطبقة.',
     cancelledJob: 'أُلغي التجميع.',
     watchOn: 'المراقبة الحية: مفعّلة', watchOff: 'المراقبة الحية: متوقفة',
@@ -115,6 +115,21 @@ const dictionary = {
     percentOf: (done, total) => `${formatBytesStatic(done)} / ${formatBytesStatic(total)}`
   }
 };
+
+// Metadata labels are declared once per row with both translations, so the
+// English and Arabic dictionaries do not repeat the same key structure.
+const metadataLabelRows = [
+  ['inspectManifestSize', 'Playlist file size', 'حجم ملف قائمة التشغيل'],
+  ['inspectSizeUnknown', 'Unknown until assembled or downloaded', 'غير معروف حتى يتم التجميع أو التنزيل'],
+  ['inspectBitrateUnavailable', 'Not available', 'غير متاح'],
+  ['inspectUnknown', 'Unknown', 'غير معروف'],
+  ['inspectResolution', 'Resolution', 'الدقة'],
+  ['inspectCodec', 'Codec', 'الترميز']
+];
+for (const [key, english, arabic] of metadataLabelRows) {
+  dictionary.en[key] = english;
+  dictionary.ar[key] = arabic;
+}
 
 const state = {
   lang: 'en',
@@ -463,7 +478,7 @@ function render() {
     if (isStream) {
       const inspectBtn = document.createElement('button');
       inspectBtn.type = 'button';
-      inspectBtn.className = 'btn-card-action';
+      inspectBtn.className = 'btn-card-action btn-inspect';
       inspectBtn.textContent = t('inspectBtn');
       inspectBtn.disabled = !state.companion.connected;
       inspectBtn.addEventListener('click', e => {
@@ -651,7 +666,9 @@ async function inspectStream(asset) {
   }
   openMediaPreview({
     ...asset, probed: true, durationSeconds: result.durationSeconds, bitRate: result.bitRate,
-    sizeBytes: result.sizeBytes, videoTracks: result.videoTracks,
+    bitRateSource: result.bitRateSource, sizeBytes: result.sizeBytes,
+    manifestBytes: result.manifestBytes, sizeSource: result.sizeSource,
+    formatName: result.formatName, videoTracks: result.videoTracks,
     audioTracks: result.audioTracks, drmSuspected: result.drmSuspected
   });
 }
@@ -884,15 +901,40 @@ function openMediaPreview(asset) {
   ui.previewModal.hidden = false;
 }
 
+function bitrateLabel(asset) {
+  const measured = Number(asset.bitRate);
+  if (Number.isFinite(measured) && measured > 0) {
+    return `${Math.round(measured / 1000)} kbps`;
+  }
+  // DOM/player metadata occasionally says "0 kbps" for a stream it could not
+  // measure. That is an absence of data, not a measured zero.
+  const declared = typeof asset.bitrate === 'string' ? asset.bitrate.trim() : '';
+  if (declared && !/^0(?:\.0+)?\s*(?:kbps|kb\/s|bps)?$/i.test(declared)) return declared;
+  return null;
+}
+
 function renderPreviewDetails(asset) {
   const rows = [];
+  const probed = asset.probed === true;
   const add = (label, value) => { if (value !== null && value !== undefined && value !== '') rows.push([label, String(value)]); };
-  add(t('inspectDuration'), asset.duration ? `${asset.duration}s`
-    : (asset.durationSeconds ? `${asset.durationSeconds.toFixed(1)}s` : null));
-  add(t('inspectBitrate'), asset.bitRate ? `${Math.round(asset.bitRate / 1000)} kbps` : asset.bitrate);
-  add('Resolution', asset.resolution);
-  add('Codec', asset.codec);
-  add(t('inspectSize'), asset.sizeBytes ? formatBytes(asset.sizeBytes) : null);
+  const duration = asset.duration ? `${asset.duration}s`
+    : (asset.durationSeconds ? `${asset.durationSeconds.toFixed(1)}s` : null);
+  add(t('inspectDuration'), duration || (probed ? t('inspectUnknown') : null));
+  const bitrate = bitrateLabel(asset);
+  add(t('inspectBitrate'), bitrate || (probed ? t('inspectBitrateUnavailable') : null));
+  add(t('inspectResolution'), asset.resolution);
+  add(t('inspectCodec'), asset.codec);
+  if (asset.formatName) add(t('inspectContainer'), asset.formatName);
+  if (asset.sizeSource === 'manifest') {
+    // ffprobe's format.size for HLS/DASH is the playlist file, not the media.
+    add(t('inspectManifestSize'), asset.manifestBytes ? formatBytes(asset.manifestBytes)
+      : t('inspectUnknown'));
+    add(t('inspectSize'), t('inspectSizeUnknown'));
+  } else if (asset.sizeBytes) {
+    add(t('inspectSize'), formatBytes(asset.sizeBytes));
+  } else if (probed) {
+    add(t('inspectSize'), t('inspectUnknown'));
+  }
   if (asset.videoTracks?.length) {
     add(t('inspectTracks'), asset.videoTracks.map(v => `${v.width}×${v.height} ${v.codec}`).join(', ')
       + (asset.audioTracks?.length ? ` · ${asset.audioTracks.map(a => a.codec).join(', ')}` : ''));

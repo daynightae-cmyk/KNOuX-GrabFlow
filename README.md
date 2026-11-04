@@ -1,4 +1,4 @@
-# KNOuX GrabFlow™ — Full Edition (v0.6.6)
+# KNOuX GrabFlow™ — Full Edition (v0.6.7)
 
 **Intelligent Video & Web Asset Discovery. Private by design. Beautifully engineered.**
 
@@ -12,6 +12,20 @@ Bilingual English/Arabic (RTL), local-only, zero telemetry, no hosted backend.
 > continuous progress not verified" (progress streams and is tested), and the violet-only
 > "Obsidian Glass 2.0" palette (the identity is now the cyan → violet neon of the orb mark).
 > This is an engineering build with real Edge 156 evidence, not a store-approved release.
+
+## What v0.6.7 fixes
+
+| Area | Before (v0.6.6) | Now (v0.6.7) |
+|---|---|---|
+| HLS/DASH Inspector size | ffprobe's playlist byte size shown as "Reported size" (`345 B`) | labelled **Playlist file size**; **Media size** is explicitly unknown until assembly/download |
+| Unavailable bitrate | rendered as `0 kbps` | rendered as **Not available**; a measured zero is never invented |
+| Duration, tracks, codecs, resolution | correct | preserved unchanged |
+| Nested audit wording | "8 references verified public" | "Nested audit passed: 8 references checked" (EN/AR) |
+| Network policy | enforced | unchanged: SSRF, DNS rebinding, redirects, private addresses, nested references and FFmpeg transports remain enforced and tested |
+
+Live Edge 156 evidence: the real Inspect button reported a 345 B playlist and a
+16.0 s H.264/AAC stream, while the assembled MP4 was 1,042,878 bytes. The audit
+line showed 8 references checked, not a public-address claim.
 
 ## What the v0.6.3 work added (shipped as v0.6.6)
 

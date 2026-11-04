@@ -5,7 +5,7 @@ Adaptive HLS/DASH assembly and stream inspection require locally installed FFmpe
 
 ## 1. Install the unpacked extension
 
-**Microsoft Edge** (the primary target for v0.6.6):
+**Microsoft Edge** (the primary target for v0.6.7):
 
 1. Go to `edge://extensions` and enable Developer mode.
 2. Choose *Load unpacked* and select the repository extension root.

@@ -3,7 +3,7 @@
 **Product:** KNOuX GrabFlow browser extension (Manifest V3, Chrome and Edge)
 **Publisher:** KNOuX LABS
 **Effective date:** November 4, 2026
-**Applies to:** GrabFlow v0.6.4 and its optional separately installed Windows companion
+**Applies to:** GrabFlow v0.6.5 and its optional separately installed Windows companion
 
 ## Overview
 
@@ -25,7 +25,7 @@ When you choose to preview or download media, Chrome or the optional media compa
 
 ## Background service worker
 
-GrabFlow v0.6.4 registers a Manifest V3 service worker. Its purpose is narrow and it is worth
+GrabFlow v0.6.5 registers a Manifest V3 service worker. Its purpose is narrow and it is worth
 stating plainly, because "background" is a word people reasonably read as "watching".
 
 The worker does two things:

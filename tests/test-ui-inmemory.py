@@ -71,11 +71,40 @@ with sync_playwright() as p:
     page.locator('#downloadBtn').click()
     page.wait_for_function('window.__downloads.length === 1')
     assert page.evaluate('window.__downloads[0].filename') == 'KNOuX-GrabFlow/example.com/hero.webp'
+
+    # v0.6.7 metadata truth: a playlist's ffprobe format.size is the manifest
+    # file, while the assembled media size is unknown until assembly completes.
+    page.evaluate("""() => renderPreviewDetails({
+        probed: true, durationSeconds: 16.0, bitRate: null, bitRateSource: 'unavailable',
+        sizeBytes: null, manifestBytes: 345, sizeSource: 'manifest', formatName: 'hls',
+        videoTracks: [{width: 320, height: 180, codec: 'h264'}],
+        audioTracks: [{codec: 'aac'}]})""")
+    details = page.locator('#previewDetails').inner_text()
+    assert 'Playlist file size' in details, details
+    assert '345.0 B' in details, details
+    assert 'Media size' in details, details
+    assert 'Unknown until assembled or downloaded' in details, details
+    assert 'Not available' in details, details
+    assert '0 kbps' not in details, details
+    assert 'Duration' in details and 'Tracks' in details, details
+    assert page.evaluate("t('auditPassed', 8)") == \
+        'Nested audit passed: 8 references checked'
+    assert 'verified public' not in page.evaluate("t('auditPassed', 8)")
+
     page.locator('#langBtn').click()
     assert page.locator('html').get_attribute('dir')=='rtl'
     assert page.locator('#downloadStatus').is_visible()
     assert '1 ' in page.locator('#downloadStatus').inner_text()
     assert page.locator('#downloadBtn').get_by_text('تحميل المحدد').count()==1
+    assert page.evaluate("t('auditPassed', 8)") == \
+        'اكتمل التدقيق الداخلي: تم فحص 8 مرجعًا'
+    page.evaluate("""() => renderPreviewDetails({
+        probed: true, durationSeconds: 16.0, bitRate: null,
+        sizeBytes: null, manifestBytes: 345, sizeSource: 'manifest', formatName: 'hls'})""")
+    details_ar = page.locator('#previewDetails').inner_text()
+    assert 'حجم ملف قائمة التشغيل' in details_ar, details_ar
+    assert 'غير متاح' in details_ar, details_ar
+    assert '0 kbps' not in details_ar, details_ar
     page.locator('#langBtn').click()
     page.screenshot(path=str(ROOT.parent/'KNOuX-GrabFlow-v0.3.0-preview.png'),full_page=True)
     if errors: raise AssertionError(errors)

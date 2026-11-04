@@ -269,8 +269,8 @@ test('discovers plugin media from object data and embed src', () => {
   ]});
   // Spread into an outer-realm array: vm results are cross-realm Arrays and
   // deepStrictEqual compares prototypes.
-  const kinds = [...page.assets].map(a => `${a.type}:${a.source}`);
-  assert.deepEqual(kinds.sort(), ['audio:object', 'document:object', 'video:object']);
+  const kinds = [...page.assets].map(a => `${a.type}:${a.source}`).sort((a, b) => a.localeCompare(b));
+  assert.deepEqual(kinds, ['audio:object', 'document:object', 'video:object']);
 });
 test('records the browser initiatorType so a UI can show what asked for the media', () => {
   const page = run({resourceEntries: [

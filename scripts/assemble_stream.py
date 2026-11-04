@@ -15,6 +15,11 @@ import subprocess
 import sys
 from urllib.parse import urlsplit
 
+# Same confinement the native companion host applies, so the manual CLI cannot
+# become the weaker path to the same FFmpeg.
+PROTOCOL_WHITELIST = 'file,http,https,tcp,tls,crypto'
+PLAYLIST_EXTENSIONS = 'm3u8,ts,m4s,mp4,mkv,webv,vtt,srt,ssa,aac,ac3,eac3,mp3,opus'
+
 
 def validate(url: str, output: Path, *, allow_local=False):
     parsed = urlsplit(url)
@@ -62,8 +67,30 @@ def find_ffmpeg(custom: str = 'ffmpeg'):
     return binary
 
 
+def validate_executable(path_str: str) -> str:
+    """Reject anything that is not a real, plausible media executable.
+
+    `--ffmpeg` is operator input handed straight to subprocess, so a mistyped or
+    manipulated value would otherwise launch an arbitrary program. Requiring an
+    existing regular file with an executable shape closes that gap without
+    limiting legitimate portable builds.
+    """
+    candidate = Path(path_str).expanduser()
+    if not candidate.is_file():
+        raise RuntimeError(f'FFmpeg path is not an existing file: {path_str}')
+    if candidate.is_symlink():
+        raise RuntimeError(f'Refusing to execute a symlinked FFmpeg: {path_str}')
+    if not os.access(candidate, os.X_OK if os.name != 'nt' else os.R_OK):
+        raise RuntimeError(f'FFmpeg is not readable/executable: {path_str}')
+    if os.name == 'nt' and candidate.suffix.lower() not in ('.exe', '.cmd', '.bat'):
+        raise RuntimeError(f'Expected a Windows executable, got: {path_str}')
+    return str(candidate)
+
+
 def make_command(ffmpeg: str, url: str, output: Path):
     return [ffmpeg, '-hide_banner', '-nostdin', '-loglevel', 'warning',
+            '-protocol_whitelist', PROTOCOL_WHITELIST,
+            '-allowed_extensions', PLAYLIST_EXTENSIONS,
             '-i', url, '-c', 'copy',
             '-movflags', '+faststart', '-n', str(output)]
 
@@ -81,6 +108,7 @@ def main():
         ffmpeg = find_ffmpeg(a.ffmpeg)
         if not ffmpeg:
             raise RuntimeError('FFmpeg is not installed or not on PATH')
+        ffmpeg = validate_executable(ffmpeg)
         if not a.output.parent.exists():
             raise ValueError('Output directory does not exist')
         command = make_command(ffmpeg, a.url, a.output)

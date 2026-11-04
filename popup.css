@@ -174,8 +174,14 @@ button:focus-visible, input:focus-visible, select:focus-visible,
 }
 button:not(:disabled):active { transform: translateY(1px); }
 
+/* Reduced motion is a user preference, so it must win over component rules.
+   It is won with specificity rather than a forced override: the animated
+   properties live on class selectors, so naming those selectors here is
+   enough, and nothing needs to escalate its priority. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .status-dot, .dl-card-progress-bar, .refresh { animation: none; transition: none; }
+  .status-dot { animation: none; }
+  .dl-card:has(.dl-state-badge.in_progress) .dl-card-progress-bar { animation: none; }
 }
 
 .app {
@@ -584,7 +590,7 @@ button:not(:disabled):active { transform: translateY(1px); }
 .dl-detail {
   font-size: 9px; color: var(--color-text-muted); line-height: 1.35;
   padding-top: var(--space-1); border-top: 1px dashed var(--alpha-04);
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* ---------------------------------------------------------------- preview */

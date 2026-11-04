@@ -31,6 +31,15 @@ const NATIVE_PROBE_TIMEOUT_MS = 30000;
 const NATIVE_START_TIMEOUT_MS = 15000;
 const UI_PORT_NAME = 'grabflow-ui';
 
+// FFmpeg status -> job state, kept as data so the mapping stays readable.
+const ASSEMBLY_STATE_MAP = {
+  complete: 'complete',
+  cancelled: 'cancelled',
+  timeout: 'interrupted',
+  aborted: 'interrupted',
+  failed: 'failed'
+};
+
 /** @type {Map<string, object>} */
 const jobs = new Map();
 /** @type {Set<chrome.runtime.Port>} */
@@ -49,14 +58,14 @@ let idleCloseTimer = null;
 
 function jobKeyForDownload(id) { return `chrome-${id}`; }
 
-const TERMINAL_STATES = ['complete', 'failed', 'cancelled', 'interrupted', 'aborted'];
+const TERMINAL_STATES = new Set(['complete', 'failed', 'cancelled', 'interrupted', 'aborted']);
 
 function updateJob(key, patch) {
-  const merged = Object.assign({key, updatedAt: Date.now()}, jobs.get(key) || {}, patch);
+  const merged = {key, updatedAt: Date.now(), ...(jobs.get(key) || {}), ...patch};
   jobs.set(key, merged);
   // A terminal state is flushed immediately: throttling the last write is how a
   // finished download gets lost when the worker is suspended right after.
-  if (TERMINAL_STATES.includes(merged.state)) persistNow();
+  if (TERMINAL_STATES.has(merged.state)) persistNow();
   else schedulePersist();
   broadcast({type: 'job', job: merged});
   return merged;
@@ -118,7 +127,7 @@ chrome.downloads.onChanged.addListener(delta => {
   // its total byte count or final file size. One query per completion is cheap
   // and makes the Download Manager truthful.
   if (['complete', 'interrupted'].includes(delta.state && delta.state.current)) {
-    enrichDownload(delta.id);
+    enrichDownload(delta.id).catch(() => { /* the delta values already stand */ });
   }
 });
 
@@ -207,7 +216,7 @@ function connectNative() {
 }
 
 function setNativeState(patch) {
-  nativeState = Object.assign({}, nativeState, patch);
+  nativeState = {...nativeState, ...patch};
   broadcast({type: 'companion', state: nativeState});
 }
 
@@ -230,9 +239,7 @@ function handleNativeMessage(message) {
       elapsedSeconds: message.elapsedSeconds || 0
     });
   } else if (message.action === 'assemble_result') {
-    const state = message.status === 'complete' ? 'complete'
-      : (message.status === 'cancelled' ? 'cancelled'
-        : (message.status === 'timeout' || message.status === 'aborted' ? 'interrupted' : 'failed'));
+    const state = ASSEMBLY_STATE_MAP[message.status] || 'failed';
     updateJob(`companion-${message.jobId}`, {
       kind: 'companion', state, error: message.error || null,
       bytesReceived: message.bytes || 0, fileSize: message.bytes || 0,
@@ -258,10 +265,10 @@ function sendNative(payload, timeoutMs) {
     const timer = setTimeout(() => {
       pendingNative.delete(requestId);
       reject(new Error('The companion did not answer in time'));
-    }, timeoutMs || NATIVE_REQUEST_TIMEOUT_MS);
+    }, timeoutMs ?? NATIVE_REQUEST_TIMEOUT_MS);
     pendingNative.set(requestId, {resolve, reject, timer});
     try {
-      nativePort.postMessage(Object.assign({requestId}, payload));
+      nativePort.postMessage({requestId, ...payload});
     } catch (error) {
       clearTimeout(timer);
       pendingNative.delete(requestId);
@@ -348,7 +355,7 @@ chrome.runtime.onConnect.addListener(port => {
   port.onDisconnect.addListener(() => uiPorts.delete(port));
   loadJobs().then(() => {
     port.postMessage({type: 'hydrate', jobs: [...jobs.values()], companion: nativeState});
-  });
+  }).catch(() => { /* a dead port simply re-hydrates on the next connect */ });
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -394,9 +401,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 /* -------------------------------------------------------------------- startup */
 
-chrome.runtime.onStartup.addListener(() => { reconcileDownloads(); });
+chrome.runtime.onStartup.addListener(() => {
+  reconcileDownloads().catch(() => { /* retried on the next event */ });
+});
 chrome.runtime.onSuspend.addListener(() => { disconnectNative(); });
 
 // Only download state is reconciled on wake. The companion is contacted lazily,
 // when the popup asks, so an idle extension never leaves a host process running.
-reconcileDownloads();
+reconcileDownloads().catch(() => { /* first run may have no history at all */ });

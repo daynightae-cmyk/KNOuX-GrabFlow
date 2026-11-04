@@ -46,6 +46,7 @@ HOST_NAME = "com.knoux.grabflow.companion"
 # --- Hard ceilings. Every one of these is enforced, not advisory. -----------
 MAX_MESSAGE_BYTES = 10 * 1024 * 1024      # inbound native-messaging frame
 MAX_MANIFEST_BYTES = 4 * 1024 * 1024      # a single playlist/MPD body we will read
+MANIFEST_TOO_LARGE = 'Media manifest exceeds the maximum accepted size'
 MAX_NESTED_ENTRIES = 20000                # segments/variants inspected per manifest
 MAX_REDIRECT_HOPS = 5                     # per fetched resource
 MAX_URL_LENGTH = 4096
@@ -233,14 +234,22 @@ def _pinned_connect(scheme, hostname, port, address, timeout):
 
     The TCP connection dials the audited IP while SNI and certificate validation
     still use the original hostname, so pinning closes the DNS-rebinding window
-    without weakening trust: the peer certificate is verified against the real
-    host name, and neither check_hostname nor verify_mode is relaxed.
+    without weakening trust. Verification settings are stated explicitly rather
+    than inherited from defaults, and the result is asserted before the caller
+    gets the socket: if a future change ever relaxed either one, this raises
+    instead of silently accepting a certificate issued to some other host.
     """
     raw = socket.create_connection((address, port), timeout=timeout)
     if scheme != 'https':
         return raw, None
     context = ssl.create_default_context()
+    context.check_hostname = True
+    context.verify_mode = ssl.CERT_REQUIRED
     wrapped = context.wrap_socket(raw, server_hostname=hostname)
+    if not wrapped.server_hostname or not context.check_hostname:
+        wrapped.close()
+        raise MediaPolicyError('TLS hostname verification is not active for '
+                               f'{hostname}; refusing to transfer media')
     return wrapped, hostname
 
 
@@ -255,7 +264,7 @@ def _recv_until(sock, predicate, deadline, limit, error):
             break
         buffer.extend(piece)
         if len(buffer) > limit:
-            raise MediaFetchError('Media manifest exceeds the maximum accepted size')
+            raise MediaFetchError(MANIFEST_TOO_LARGE)
     return buffer
 
 
@@ -278,7 +287,7 @@ def _read_chunked_body(sock, initial, deadline):
         if size == 0:
             return bytes(payload)
         if len(payload) + size > MAX_MANIFEST_BYTES:
-            raise MediaFetchError('Media manifest exceeds the maximum accepted size')
+            raise MediaFetchError(MANIFEST_TOO_LARGE)
         while len(remainder) < size + 2:
             piece = sock.recv(min(65536, size + 2 - len(remainder)))
             if not piece:
@@ -312,7 +321,7 @@ def _read_http_response(sock, timeout):
     expected = headers.get('content-length')
     payload = bytearray(body_start)
     if len(payload) > MAX_MANIFEST_BYTES:
-        raise MediaFetchError('Media manifest exceeds the maximum accepted size')
+        raise MediaFetchError(MANIFEST_TOO_LARGE)
     limit = int(expected) if expected and expected.isdigit() else None
     while (limit is None and len(payload) < MAX_MANIFEST_BYTES) or (limit is not None and len(payload) < limit):
         if time.time() > deadline:
@@ -322,7 +331,7 @@ def _read_http_response(sock, timeout):
             break
         payload.extend(piece)
         if len(payload) > MAX_MANIFEST_BYTES:
-            raise MediaFetchError('Media manifest exceeds the maximum accepted size')
+            raise MediaFetchError(MANIFEST_TOO_LARGE)
     return status_line, headers, bytes(payload)
 
 
@@ -383,7 +392,7 @@ def fetch_manifest(url: str, allow_local: bool = False, timeout: int = FETCH_TIM
         if code != 200:
             raise MediaFetchError(f'Media manifest request failed with HTTP {code}')
         if len(payload) > MAX_MANIFEST_BYTES:
-            raise MediaFetchError('Media manifest exceeds the maximum accepted size')
+            raise MediaFetchError(MANIFEST_TOO_LARGE)
         return payload.decode('utf-8', 'replace'), current
     raise MediaPolicyError('Media manifest exceeded the maximum redirect depth')
 
@@ -399,7 +408,7 @@ def audit_nested_urls(text: str, base_url: str, allow_local: bool = False):
         if findings['checked'] >= MAX_NESTED_ENTRIES:
             raise MediaPolicyError('Media manifest references too many nested resources')
         candidate = urljoin(base_url, raw.strip())
-        if candidate.startswith('data:') or candidate.startswith('blob:'):
+        if candidate.startswith(('data:', 'blob:')):
             findings['blocked'].append(candidate[:120])
             continue
         try:
@@ -636,7 +645,7 @@ class CompanionHost:
                      'hosts': findings['hosts'], 'reason': ''}
         except MediaPolicyError:
             raise
-        except (MediaFetchError, OSError, UnicodeDecodeError) as exc:
+        except (MediaFetchError, UnicodeDecodeError) as exc:
             audit = {'status': 'unavailable', 'checked': 0, 'hosts': [],
                      'reason': str(exc)[:200]}
 
@@ -878,7 +887,7 @@ def run_host():
         while True:
             try:
                 msg = read_message(stdin)
-            except (OSError, ValueError, json.JSONDecodeError) as exc:
+            except (OSError, ValueError) as exc:
                 # A length-prefixed stream cannot be resynchronised once a frame is
                 # short, oversized or unparseable. Reporting it and looping would
                 # spin forever on the same bytes, so the session ends here.

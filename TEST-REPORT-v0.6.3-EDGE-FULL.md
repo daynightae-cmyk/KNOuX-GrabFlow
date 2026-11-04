@@ -228,6 +228,41 @@ These came out of running the tests, not from reading the code.
    Download Manager view, and it re-seeded assets without their `name`. It only surfaced once the
    `[hidden]` fix above made hidden panels genuinely hidden, which is the correct behaviour.
 
+## SonarCloud findings, read from the API and fixed
+
+With a Sonar token the actual findings became visible: 116 issues on the PR. The two failing
+conditions were driven by these, not by the complexity nits:
+
+**Security**
+- `python:S5527` on `_pinned_connect`. The code was already correct — `server_hostname` is what
+  reconciles dialling an IP with verifying a name — but nothing *stated* the guarantee.
+  `check_hostname` and `verify_mode` are now set explicitly and asserted after the handshake, so
+  a future regression raises instead of silently accepting a certificate issued to another host.
+- `pythonsecurity:S8701` on `assemble_stream.main()`: `--ffmpeg` was handed to subprocess after
+  only a "does it exist" check. Added `validate_executable()` requiring an existing regular,
+  non-symlink, executable-shaped file. The CLI also now applies the same protocol and extension
+  whitelists as the host, so the manual path is not the weaker path.
+- `githubactions:S8541`/`S8544`: pip installs in CI were unpinned and allowed source builds.
+  Every install is now `--only-binary ":all:"` with an exact version.
+
+**Reliability**
+- `python:S5779` × 34: the Edge suite asserted inside a `try` that caught `AssertionError`.
+  Behaviour was still correct, but the pattern is fragile; the handler now catches any exception,
+  records the type, and exits non-zero.
+- `javascript:S9383` × 8: floating promises in `background.js` and `popup.js`. These were real —
+  an unhandled rejection in a service worker can take the worker down mid-download. Every one now
+  has a rejection handler with a comment on what the fallback means.
+- `javascript:S2871`: a locale-dependent `.sort()` in a new scanner assertion, replaced with an
+  explicit `localeCompare` comparator.
+- `javascript:S6661`, `S3358`, `S6582`, `S7776`, `python:S5713`, `S8513`, `S1192`, `css:S9423`,
+  `css:S1874` cleaned where the change was safe.
+
+**A regression my own refactor introduced, caught by running the suite:** extracting a `badge()`
+helper collided with `const badge` inside `render()`, putting the name in a temporal dead zone.
+Edge failed with `ReferenceError: Cannot access 'badge' before initialization` and the 20-fixture
+matrix went red. Renamed to `makeBadge`; both suites pass again. This is the case for executing
+the tests rather than trusting a green unit suite.
+
 ## Not verified, stated plainly
 
 - Microsoft Partner Center enrolment, submission and review ID: untouched.

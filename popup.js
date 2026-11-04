@@ -155,7 +155,7 @@ function sendToWorker(type, payload) {
   return new Promise(resolve => {
     if (!chrome.runtime?.sendMessage) { resolve(null); return; }
     try {
-      chrome.runtime.sendMessage(Object.assign({type}, payload || {}), response => {
+      chrome.runtime.sendMessage({type, ...(payload || {})}, response => {
         if (chrome.runtime.lastError) { resolve(null); return; }
         resolve(response ?? null);
       });
@@ -251,7 +251,8 @@ async function startDownloadLocal(asset, index, domain) {
     try {
       const found = await chrome.downloads.search({id});
       const record = found && found[0];
-      if (record) Object.assign(state.jobs.get(key), {
+      const tracked = state.jobs.get(key);
+      if (record && tracked) Object.assign(tracked, {
         state: record.state, bytesReceived: record.bytesReceived,
         totalBytes: record.totalBytes, fileSize: record.fileSize,
         filename: record.filename || filename, error: record.error, updatedAt: Date.now()
@@ -325,6 +326,20 @@ function renderButtons() {
   ui.copyBtn.disabled = state.busy || !hasSelection;
   ui.downloadBtn.disabled = state.busy || !hasDownloadable;
   ui.selectedLabel.textContent = t('selected', state.selected.size);
+}
+
+function streamFormatLabel(format) {
+  if (format === 'hls') return 'HLS · M3U8';
+  if (format === 'dash') return 'DASH · MPD';
+  return format ? format.toUpperCase() : 'VIDEO FILE';
+}
+
+function makeBadge(className, text, title) {
+  const node = document.createElement('span');
+  node.className = className;
+  node.textContent = text;
+  if (title) node.title = title;
+  return node;
 }
 
 function empty(message) {
@@ -404,26 +419,19 @@ function render() {
     if (asset.type === 'video') {
       const format = document.createElement('span');
       format.className = 'asset-format';
-      format.textContent = asset.format === 'hls' ? 'HLS · M3U8'
-        : (asset.format === 'dash' ? 'DASH · MPD' : (asset.format ? asset.format.toUpperCase() : 'VIDEO FILE'));
+      format.textContent = streamFormatLabel(asset.format);
       if (isStream) format.title = t('streamHint');
       badges.append(format);
 
-      if (asset.resolution) badges.append(Object.assign(document.createElement('span'),
-        {className: 'asset-format', textContent: asset.resolution}));
-      if (asset.codec) badges.append(Object.assign(document.createElement('span'),
-        {className: 'asset-format', textContent: String(asset.codec).slice(0, 16)}));
-      if (asset.duration) badges.append(Object.assign(document.createElement('span'),
-        {className: 'asset-meta', textContent: formatDuration(asset.duration)}));
-      if (asset.initiatorType) badges.append(Object.assign(document.createElement('span'),
-        {className: 'asset-format', textContent: asset.initiatorType.toUpperCase(),
-         title: 'Browser resource type'}));
-      if (asset.hasSubtitles && asset.subtitles?.length) badges.append(Object.assign(
-        document.createElement('span'), {className: 'asset-subtag',
-        textContent: t('subtitlesLabel', asset.subtitles.length)}));
+      if (asset.resolution) badges.append(makeBadge('asset-format', asset.resolution));
+      if (asset.codec) badges.append(makeBadge('asset-format', String(asset.codec).slice(0, 16)));
+      if (asset.duration) badges.append(makeBadge('asset-meta', formatDuration(asset.duration)));
+      if (asset.initiatorType) badges.append(makeBadge('asset-format',
+        asset.initiatorType.toUpperCase(), 'Browser resource type'));
+      if (asset.hasSubtitles && asset.subtitles?.length) badges.append(
+        makeBadge('asset-subtag', t('subtitlesLabel', asset.subtitles.length)));
     } else if (asset.type === 'image' && asset.width && asset.height) {
-      badges.append(Object.assign(document.createElement('span'),
-        {className: 'asset-meta', textContent: `${asset.width} × ${asset.height} px`}));
+      badges.append(makeBadge('asset-meta', `${asset.width} × ${asset.height} px`));
     }
     if (badges.childNodes.length > 0) info.append(badges);
 
@@ -445,7 +453,11 @@ function render() {
       inspectBtn.className = 'btn-card-action';
       inspectBtn.textContent = t('inspectBtn');
       inspectBtn.disabled = !state.companion.connected;
-      inspectBtn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); inspectStream(asset); });
+      inspectBtn.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        inspectStream(asset).catch(() => notice(t('inspectFailed'), true));
+      });
       actionsBar.append(inspectBtn);
 
       if (state.companion.connected) {
@@ -454,7 +466,9 @@ function render() {
         assembleBtn.className = 'btn-card-action btn-assemble';
         assembleBtn.textContent = t('assembleWithCompanion');
         assembleBtn.addEventListener('click', e => {
-          e.preventDefault(); e.stopPropagation(); assembleStreamViaCompanion(asset);
+          e.preventDefault();
+          e.stopPropagation();
+          assembleStreamViaCompanion(asset).catch(() => notice(t('assemblyFailed'), true));
         });
         actionsBar.append(assembleBtn);
       } else {
@@ -622,11 +636,11 @@ async function inspectStream(asset) {
     notice((result && result.error) || t('inspectFailed'), true);
     return;
   }
-  openMediaPreview(Object.assign({}, asset, {
-    probed: true, durationSeconds: result.durationSeconds, bitRate: result.bitRate,
+  openMediaPreview({
+    ...asset, probed: true, durationSeconds: result.durationSeconds, bitRate: result.bitRate,
     sizeBytes: result.sizeBytes, videoTracks: result.videoTracks,
     audioTracks: result.audioTracks, drmSuspected: result.drmSuspected
-  }));
+  });
 }
 
 /* ------------------------------------------------------- manager rendering --
@@ -904,7 +918,7 @@ ui.managerToggleBtn?.addEventListener('click', () => {
       renderDownloads();
       renderDownloadStatus();
       renderCompanion();
-    });
+    }).catch(() => { /* the mirrored list is still usable as-is */ });
   }
 });
 
@@ -953,7 +967,7 @@ ui.previewCopyBtn?.addEventListener('click', async () => {
   catch (_) { notice(t('copyFail'), true); }
 });
 ui.previewInspectBtn?.addEventListener('click', () => {
-  if (state.previewingAsset) inspectStream(state.previewingAsset);
+  if (state.previewingAsset) inspectStream(state.previewingAsset).catch(() => notice(t('inspectFailed'), true));
 });
 ui.previewActionBtn?.addEventListener('click', () => {
   if (state.previewingAsset && isDownloadableAsset(state.previewingAsset)) {

@@ -445,8 +445,12 @@ def run():
                 print("NOT VERIFIED here: physical toolbar click, native messaging handshake "
                       "(see tests/test-real-native-messaging-win.py and "
                       "tests/test-companion-protocol.py)")
-            except AssertionError as exc:
-                failures.append(str(exc))
+            except Exception as exc:  # noqa: BLE001 - recorded, then turned into exit 1
+                # Catching AssertionError specifically would make every assert in
+                # this block silently contribute to a list instead of failing loudly
+                # at its own line. Any exception is recorded with its type and the
+                # suite still exits non-zero below.
+                failures.append(f"{type(exc).__name__}: {exc}")
                 try:
                     SCREENSHOTS.mkdir(parents=True, exist_ok=True)
                     context.new_page().screenshot(path=str(SCREENSHOTS / "edge-failure.png"))

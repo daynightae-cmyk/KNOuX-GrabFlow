@@ -8,9 +8,8 @@ Chrome profile or an existing Native Messaging host registration.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
-import shutil
+import re
 import sys
 from tempfile import TemporaryDirectory
 
@@ -111,8 +110,18 @@ def main():
                     assert not pong["error"], f"Chrome native ping failed: {pong}"
                     assert pong["response"]["action"] == "pong", pong
                     assert pong["response"]["host"] == HOST, pong
-                    assert pong["response"]["version"] == "0.6.1", pong
-                    ffmpeg_found = bool(shutil.which("ffmpeg"))
+                    expected_host_version = re.search(
+                        r'^VERSION = "([^"]+)"',
+                        (ROOT / "scripts" / "companion_host.py").read_text(encoding="utf-8"),
+                        re.MULTILINE).group(1)
+                    assert pong["response"]["version"] == expected_host_version, pong
+                    # The handshake must also prove the session contract the popup
+                    # now depends on, not merely that a process answered.
+                    assert "assemble-async" in pong["response"]["capabilities"], pong
+                    assert pong["response"]["localMediaPolicy"] == "private-addresses-blocked", pong
+                    assert pong["response"]["maxConcurrentJobs"] >= 1, pong
+                    import media_tools
+                    ffmpeg_found = bool(media_tools.ffmpeg())
                     assert pong["response"]["ffmpegAvailable"] == ffmpeg_found, pong
                     blocked = send(page, {
                         "action": "probe",

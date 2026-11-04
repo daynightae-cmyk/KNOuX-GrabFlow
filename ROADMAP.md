@@ -37,3 +37,25 @@ Small bundle, no credential harvesting, no DRM bypass, no unapproved hidden requ
 2. Expand controlled video fixture matrix to MP4/WebM, HLS master quality variants, DASH, MIME-only URLs, dynamic player assets, unsupported DRM and browser-internal pages.
 3. Optional Native Messaging helper for one-click HLS/DASH assembly, only with explicit user opt-in and a security audit. Desktop helper is currently manual.
 4. Chrome Web Store legal/metadata/privacy review and submission — **not started**.
+
+## v0.6.3 — Full Edition, Edge parity (November 4, 2026)
+
+Shipped and tested on this device: MV3 service worker owning the download lifecycle and the
+native companion session; persistent native port with real FFmpeg progress and working cancel;
+nested-playlist SSRF audit with pinned DNS and redirect re-validation; FFmpeg protocol and
+extension confinement; `probe` wired to the UI for real stream metadata; Edge native-host
+registration alongside Chrome; deterministic Edge packaging; branded Edge 156 runtime QA
+(`tests/test-edge-runtime.py`); orb-derived icon set and a three-layer token stylesheet.
+
+Deliberately not done: no host permissions, no `webRequest`/`declarativeNetRequest`, no optional
+permissions. The least-privilege contract is now asserted more precisely than before, not loosened.
+
+Remaining gates before any Full Release claim:
+
+1. Live Edge browser→native→Edge assembly on a registered machine (the Edge run currently and
+   correctly reports the host as not installed here).
+2. Multi-gigabyte stream behaviour: ceilings are unit-exercised, not stress-tested.
+3. Physical toolbar click and the `activeTab` grant it provides — automation cannot press it.
+4. Microsoft Partner Center enrolment, submission and review ID — not started.
+5. Store listing assets and screenshots refreshed for the new identity.
+6. Accessibility measurement: contrast, focus order, screen-reader behaviour.

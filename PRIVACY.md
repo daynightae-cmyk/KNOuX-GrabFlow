@@ -1,9 +1,9 @@
 # KNOuX GrabFlow — Privacy Policy
 
-**Product:** KNOuX GrabFlow Chrome extension (Manifest V3)
+**Product:** KNOuX GrabFlow browser extension (Manifest V3, Chrome and Edge)
 **Publisher:** KNOuX LABS
-**Effective date:** November 3, 2026
-**Applies to:** GrabFlow v0.6.1 and its optional separately installed Windows companion
+**Effective date:** November 4, 2026
+**Applies to:** GrabFlow v0.6.3 and its optional separately installed Windows companion
 
 ## Overview
 
@@ -23,15 +23,44 @@ When you choose to preview or download media, Chrome or the optional media compa
 - **storage:** Save language preference and a bounded local list of GrabFlow download jobs and their associated metadata in `chrome.storage.local`, including URLs, filenames, states and download IDs. You may clear GrabFlow's local history through its Clear History control; Chrome's separate download history and the files themselves are not erased by this action.
 - **nativeMessaging:** Connect, when requested by the popup, to the optional locally installed `com.knoux.grabflow.companion` host for availability checks and user-selected media actions. The host can receive a stream URL, output filename and job/action metadata. The host is configured for one explicitly registered extension ID.
 
+## Background service worker
+
+GrabFlow v0.6.3 registers a Manifest V3 service worker. Its purpose is narrow and it is worth
+stating plainly, because "background" is a word people reasonably read as "watching".
+
+The worker does two things:
+
+- It receives `chrome.downloads.onChanged` events so download progress, completion and failure
+  keep being reported after you close the popup, and so the state is still there when you reopen
+  it. Before this, that listener lived in the popup document and stopped working the moment the
+  popup closed.
+- It holds the native companion connection, so a long FFmpeg assembly can stream progress and be
+  genuinely cancelled. The host process is closed once no assembly is running; an idle extension
+  does not leave a process behind.
+
+The worker does **not** and **cannot**: observe or modify network traffic (no `webRequest`, no
+`declarativeNetRequest`), read cookies or browsing history, use the debugger, hold any host
+permission, or scan a page on its own. It requests no permissions beyond the five above, and
+`tests/test-scanner.cjs` and `tests/test-utilities.cjs` fail the build if the manifest or the
+worker source drifts from that. Page scanning still happens only when you open the popup, only in
+the tab you are looking at, and only by reading that page's markup.
+
 ## Storage, retention and deletion
 
-Media scan results are held in extension memory during use; active job records and language choice can persist locally across popup sessions. GrabFlow does not synchronize this state to a KNOuX cloud account. Use the in-extension Clear History control to clear its locally tracked download jobs; uninstalling the extension also removes its extension-local storage as managed by the browser. Files already downloaded remain on your computer until you delete them separately.
+Media scan results are held in extension memory during use; active job records and language choice can persist locally across popup sessions. Since v0.6.3 those records live under a single bounded `grabflowJobs` list in `chrome.storage.local` — at most 80 entries, oldest finished job removed first — written by the service worker rather than by the popup. Each record holds the media URL, the output filename, the domain, the format, a state, byte counts and, for companion assemblies, the nested-URL audit result. GrabFlow does not synchronize this state to a KNOuX cloud account. Use the in-extension Clear History control to clear its locally tracked download jobs (jobs still transferring are kept so they are not abandoned); Chrome's or Edge's separate download history and the files themselves are not erased by this action. Files already downloaded remain on your computer until you delete them separately.
 
 ## Native companion, FFmpeg and network access
 
-The Windows native companion is optional and separately installed. When you explicitly request HLS/DASH assembly, the companion launches FFmpeg with argument-array subprocess execution and uses the media URLs you selected to retrieve playlist and segment resources. It does not receive browser cookies or read the browser's credential store as part of this workflow. It does not promise that a media URL is free from sensitive tokens in query parameters. FFmpeg is a separate local dependency; it is not packaged inside the Chrome extension.
+The Windows native companion is optional and separately installed. When you explicitly request HLS/DASH assembly, the companion launches FFmpeg with argument-array subprocess execution and uses the media URLs you selected to retrieve playlist and segment resources. It does not receive browser cookies or read the browser's credential store as part of this workflow. It does not promise that a media URL is free from sensitive tokens in query parameters. FFmpeg is a separate local dependency; it is not packaged inside the extension.
 
-The native companion's media source may refer to multiple CDN hosts and may redirect. Do not use the companion with private, confidential, protected, or unauthorized media. It is not a VPN or anonymity service.
+Since v0.6.3 the companion also does the following, which reduces but does not eliminate the risk of a malicious media host:
+
+- fetches the manifest itself before FFmpeg starts, over a connection pinned to an address that already passed validation, re-validating every redirect hop;
+- validates every nested reference the manifest points to (keys, initializations, variants, segments), so a public playlist cannot make the tool reach a private or loopback address;
+- confines FFmpeg to an explicit transport whitelist and playlist-extension whitelist;
+- enforces ceilings on manifest size, nested reference count, output size, concurrent jobs and elapsed time, aborting rather than exhausting the machine.
+
+The companion's media source may refer to multiple CDN hosts and may redirect. Do not use the companion with private, confidential, protected, or unauthorized media. It is not a VPN or anonymity service.
 
 ## Data sharing, advertising and tracking
 

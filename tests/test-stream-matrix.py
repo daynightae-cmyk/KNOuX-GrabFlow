@@ -11,14 +11,16 @@ import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import tempfile
 import threading
 import unittest
 
+import media_tools
+
 ROOT = Path(__file__).resolve().parents[1]
+FFMPEG_BIN, FFPROBE_BIN = media_tools.pair()
 ASSEMBLER = ROOT / "scripts" / "assemble_stream.py"
 
 
@@ -39,7 +41,7 @@ def run_checked(args: list[str], timeout: int = 60, cwd: Path | None = None) -> 
 
 def make_hls_variant(folder: Path, name: str, dimensions: str) -> None:
     run_checked([
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+        FFMPEG_BIN, "-hide_banner", "-loglevel", "error", "-nostdin",
         "-f", "lavfi", "-i", f"testsrc2=size={dimensions}:rate=12",
         "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100",
         "-t", "3", "-c:v", "libx264", "-preset", "ultrafast",
@@ -52,7 +54,7 @@ def make_hls_variant(folder: Path, name: str, dimensions: str) -> None:
 
 def make_dash(folder: Path) -> None:
     run_checked([
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+        FFMPEG_BIN, "-hide_banner", "-loglevel", "error", "-nostdin",
         "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=12",
         "-f", "lavfi", "-i", "sine=frequency=660:sample_rate=44100",
         "-t", "3", "-c:v", "libx264", "-preset", "ultrafast",
@@ -67,7 +69,7 @@ def make_dash(folder: Path) -> None:
 def inspect_media(file: Path, expected_width: int) -> tuple[float, str]:
     assert file.is_file() and file.stat().st_size > 5000, "Missing or trivial output"
     result = run_checked([
-        "ffprobe", "-v", "error",
+        FFPROBE_BIN, "-v", "error",
         "-show_entries", "stream=codec_type,width,height:format=duration,format_name",
         "-of", "json", str(file)
     ])
@@ -85,8 +87,10 @@ def inspect_media(file: Path, expected_width: int) -> tuple[float, str]:
 class RealStreamMatrix(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
-            raise RuntimeError("BLOCKED: FFmpeg and FFprobe are mandatory for real stream matrix")
+        if not (FFMPEG_BIN and FFPROBE_BIN):
+            raise RuntimeError(
+                "BLOCKED: FFmpeg and FFprobe are mandatory for real stream matrix. "
+                "Install them or set KNOUX_FFMPEG_DIR / KNOUX_FFMPEG_EXE / KNOUX_FFPROBE_EXE.")
         cls.temp = tempfile.TemporaryDirectory(prefix="grabflow-stream-matrix-")
         cls.path = Path(cls.temp.name)
         try:

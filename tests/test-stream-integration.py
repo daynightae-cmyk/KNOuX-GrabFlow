@@ -1,11 +1,12 @@
 """Local-only functional HLS-to-MP4 test. Requires ffmpeg/ffprobe; skips if absent."""
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-import functools, json, shutil, subprocess, sys, tempfile, threading
-from unittest import SkipTest
+import functools, json, subprocess, sys, tempfile, threading
+import media_tools
 
 ROOT=Path(__file__).resolve().parents[1]
-if not (shutil.which('ffmpeg') and shutil.which('ffprobe')):
+FFMPEG_BIN, FFPROBE_BIN = media_tools.pair()
+if not (FFMPEG_BIN and FFPROBE_BIN):
     print('SKIP: FFmpeg/FFprobe missing; no real stream conversion claim')
     sys.exit(0)
 with tempfile.TemporaryDirectory(prefix='grabflow-stream-') as d:
@@ -13,7 +14,7 @@ with tempfile.TemporaryDirectory(prefix='grabflow-stream-') as d:
     fixtures=root/'fixtures'
     fixtures.mkdir()
     sample=fixtures/'master.m3u8'
-    generation=subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-f','lavfi',
+    generation=subprocess.run([FFMPEG_BIN,'-hide_banner','-loglevel','error','-f','lavfi',
        '-i','testsrc2=size=160x90:rate=12','-f','lavfi','-i','sine=frequency=440:sample_rate=44100',
        '-t','3','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-c:a','aac',
        '-f','hls','-hls_time','1','-hls_playlist_type','vod',str(sample)],capture_output=True,text=True)
@@ -27,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix='grabflow-stream-') as d:
         completed=subprocess.run(cmd,capture_output=True,text=True,timeout=60)
         assert completed.returncode==0, (completed.stderr,completed.stdout)
         assert output.is_file() and output.stat().st_size > 5000
-        probe=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration:stream=codec_type',
+        probe=subprocess.run([FFPROBE_BIN,'-v','error','-show_entries','format=duration:stream=codec_type',
                               '-of','json',str(output)],capture_output=True,text=True,check=True)
         media=json.loads(probe.stdout)
         assert 2.5<float(media['format']['duration'])<4.0,media

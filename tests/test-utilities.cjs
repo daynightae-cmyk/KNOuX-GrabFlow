@@ -53,13 +53,52 @@ test('CSV quotes potentially dangerous names as text', () => {
  const hostile=exportAssetsCsv([{type:'image',name:'=HYPERLINK(\"evil\")',url:'https://x.test'}]);
  assert.ok(hostile.includes(String.raw`"'=HYPERLINK`));
 });
-test('manifest imposes least privilege, no remote code or background scanner', () => {
+test('manifest imposes least privilege, no remote code, no traffic observation', () => {
  const m = require('../manifest.json');
  assert.equal(m.manifest_version, 3);
  assert.deepEqual(m.permissions, ['activeTab','scripting','downloads','storage','nativeMessaging']);
  assert.equal(m.host_permissions, undefined);
- assert.equal(m.background, undefined);
+ assert.equal(m.optional_permissions, undefined);
+ assert.equal(m.declarative_net_request, undefined);
+ // The service worker exists for download lifecycle + companion session only.
+ assert.deepEqual(m.background, {service_worker: 'background.js'});
+ const code = require('fs').readFileSync(require('path').join(__dirname, '..', 'background.js'), 'utf8')
+   .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+ for (const forbidden of ['webRequest','declarativeNetRequest','executeScript','<all_urls>','debugger']) {
+   assert.ok(!code.includes(forbidden), `background.js must not use ${forbidden}`);
+ }
  assert.ok(!JSON.stringify(m).includes('unsafe-eval'));
+});
+test('hidden panels actually hide: every display-declaring class has a [hidden] rule', () => {
+ // A `display:` on a class outranks the UA `[hidden]{display:none}` rule. This
+ // shipped once as the scanner and Download Manager stacking together in Edge.
+ const css = require('fs').readFileSync(require('path').join(__dirname, '..', 'popup.css'), 'utf8');
+ const html = require('fs').readFileSync(require('path').join(__dirname, '..', 'popup.html'), 'utf8');
+ // Classes used on elements the code toggles `hidden` on.
+ const toggled = ['view-panel', 'preview-modal', 'notice', 'download-status'];
+ for (const cls of toggled) {
+   const declaresDisplay = new RegExp('\\.' + cls + '[^{}]*\\{[^}]*display:', 's').test(css);
+   if (declaresDisplay) {
+     assert.ok(new RegExp('\\.' + cls + '\\[hidden\\]').test(css),
+       `.${cls} sets display but has no [hidden] override`);
+   }
+ }
+ // The markup must still carry the ids the worker bridge and QA scripts address.
+ for (const id of ['managerView','scannerView','previewModal','downloadStatus','notice',
+                   'buildTag','watchToggleBtn','previewInspectBtn','previewDetails']) {
+   assert.ok(html.includes(`id="${id}"`), `popup.html lost #${id}`);
+ }
+});
+test('re-assembling a finished companion job keeps the media type', () => {
+ // safeDownloadName derives the extension from asset.type. Dropping it on the
+ // retry path silently produced a .bin output for an HLS assembly.
+ const popup = require('fs').readFileSync(require('path').join(__dirname, '..', 'popup.js'), 'utf8');
+ const retry = popup.match(/if \(item\.kind === 'companion'\)[\s\S]{0,400}?return;\s*\}/);
+ assert.ok(retry, 'companion retry branch not found');
+ assert.ok(/type:\s*'video'/.test(retry[0]),
+   'companion retry must pass a media type so the output extension is correct');
+ assert.equal(safeDownloadName({type:'video', url:'https://cdn.test/master.m3u8', format:'hls'}, 3, 'cdn.test'),
+   'KNOuX-GrabFlow/cdn.test/master.m3u8');
 });
 test('stream playlists are copy-only, direct video files are downloadable', () => {
  assert.equal(isDownloadableAsset({type:'video',format:'hls'}), false);

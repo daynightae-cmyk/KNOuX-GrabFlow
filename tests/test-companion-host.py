@@ -2,7 +2,6 @@
 """Comprehensive security and contract tests for Native Companion Host."""
 
 import io
-import json
 from pathlib import Path
 import struct
 import sys
@@ -49,14 +48,19 @@ class CompanionHostTests(unittest.TestCase):
 
     def test_ssrf_and_credential_rejections(self):
         strict_host = CompanionHost(allow_local=False)
-        with self.assertRaises(ValueError):
-            validate_media_url('https://user:pass@example.com/stream.m3u8', allow_local=False)
-        with self.assertRaises(ValueError):
-            validate_media_url('file:///etc/passwd', allow_local=False)
-        with self.assertRaises(ValueError):
-            validate_media_url('javascript:alert(1)', allow_local=False)
-        with self.assertRaises(ValueError):
-            validate_media_url('https://127.0.0.1/stream.m3u8', allow_local=False)
+        for url in (
+            'https://user:pass@example.com/stream.m3u8',
+            'file:///etc/passwd',
+            'javascript:alert(1)',
+            'https://127.0.0.1/stream.m3u8',
+        ):
+            # Direct helper, strict by default.
+            with self.subTest(direct=url), self.assertRaises(ValueError):
+                validate_media_url(url, allow_local=False)
+            # And through the shipped dispatch path, so the policy cannot be
+            # bypassed by choosing a different entry point.
+            with self.subTest(dispatch=url), self.assertRaises(ValueError):
+                strict_host.handle_probe({'url': url})
 
     def test_destination_safety_and_no_clobber(self):
         with tempfile.TemporaryDirectory() as td:
@@ -71,6 +75,18 @@ class CompanionHostTests(unittest.TestCase):
             # Existing file (no-clobber)
             safe_file.write_bytes(b'existing content')
             self.assertFalse(is_safe_destination(safe_file))
+
+    def test_playlist_suffix_is_dropped_before_the_media_suffix(self):
+        # safeDownloadName keeps the playlist name for an HLS asset, so without
+        # this the assembled file would be "master.m3u8.mp4".
+        for name, expected in (
+            ('KNOuX-GrabFlow/cdn.test/master.m3u8', 'master.mp4'),
+            ('stream.mpd', 'stream.mp4'),
+            ('KNOuX-GrabFlow/cdn.test/clip.M3U8', 'clip.mp4'),
+            ('KNOuX-GrabFlow/cdn.test/clip.mkv', 'clip.mkv'),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(resolve_safe_output(name).name, expected)
 
     def test_resolve_safe_output(self):
         p = resolve_safe_output('my_stream.mp4')

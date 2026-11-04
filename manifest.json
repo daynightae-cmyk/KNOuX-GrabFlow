@@ -1,15 +1,33 @@
 {
   "manifest_version": 3,
-  "name": "KNOuX GrabFlow - Page Asset Finder",
+  "name": "__MSG_appName__",
   "short_name": "KNOuX GrabFlow",
-  "description": "Detect direct videos and HLS/DASH stream playlists, plus images, audio and documents from the page you choose. Private, local and lightweight.",
-  "version": "0.6.1",
+  "default_locale": "en",
+  "description": "__MSG_appDesc__",
+  "version": "0.6.3",
   "minimum_chrome_version": "110",
-  "permissions": ["activeTab", "scripting", "downloads", "storage", "nativeMessaging"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads",
+    "storage",
+    "nativeMessaging"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_title": "KNOuX GrabFlow",
     "default_popup": "popup.html",
-    "default_icon": {"16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png"}
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
-  "icons": {"16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png"}
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
 }

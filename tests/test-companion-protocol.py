@@ -289,6 +289,34 @@ def main():
                 assert findings["checked"] == 1 and findings["hosts"] == ["cdn.example.test"], findings
                 print(f"[11] NESTED PUBLIC ALLOWED: {findings}")
 
+            # Regression guard for the stderr drain. A chatty FFmpeg writes far more
+            # diagnostics than an OS pipe holds, and reading stderr only after stdout
+            # closes would deadlock the job instead of finishing it. A stub makes the
+            # volume deterministic, and the wait below is what detects a hang.
+            stub = root / "chatty_ffmpeg.py"
+            stub.write_text(
+                "import sys\n"
+                "for i in range(2000):\n"
+                "    sys.stderr.write('[http] warning: segment %d unavailable, retrying\\n' % i)\n"
+                "    sys.stderr.flush()\n"
+                "sys.stdout.write('frame=100\\ntotal_size=4096\\nout_time_us=1000000\\nprogress=end\\n')\n"
+                "sys.stdout.flush()\n", encoding="utf-8")
+            drain_host = ch.CompanionHost(allow_local=True)
+            emitted = []
+            drain_host.emitter = emitted.append
+            drain_job = ch._Job("jdrain", "https://media.example.test/master.m3u8",
+                                out_dir / "drain.mp4")
+            worker = threading.Thread(
+                target=lambda: drain_host._run_job(
+                    drain_job, [sys.executable, str(stub)]), daemon=True)
+            worker.start()
+            worker.join(timeout=90)
+            assert not worker.is_alive(), "assembly worker hung: stderr was not drained"
+            assert drain_job.finished, "job did not reach a terminal state"
+            progress = [m for m in emitted if m.get("action") == "assemble_progress"]
+            print(f"[12] STDERR_DRAINED job finished without deadlock; "
+                  f"progress_frames={len(progress)} bytes_seen={drain_job.total_bytes}")
+
             print("\nCOMPANION_PROTOCOL_TEST: ALL CHECKS PASSED")
         finally:
             server.shutdown()

@@ -662,7 +662,10 @@ function renderDownloads() {
     ui.managerList.replaceChildren();
     const emptyBlock = document.createElement('div');
     emptyBlock.className = 'empty-downloads';
-    emptyBlock.innerHTML = '<div class="empty-orbit">▽</div>';
+    const emptyGlyph = document.createElement('div');
+    emptyGlyph.className = 'empty-orbit';
+    emptyGlyph.textContent = '▽';
+    emptyBlock.append(emptyGlyph);
     const label = document.createElement('div');
     label.textContent = t('noDownloads');
     emptyBlock.append(label);
@@ -806,10 +809,12 @@ function openMediaPreview(asset) {
     ui.previewContent.replaceChildren();
     const block = document.createElement('div');
     block.className = 'empty';
-    block.innerHTML = '<div class="empty-orbit">⚠</div>';
+    const glyph = document.createElement('div');
+    glyph.className = 'empty-orbit';
+    glyph.textContent = '⚠';
     const label = document.createElement('div');
     label.textContent = t('corsNotice');
-    block.append(label);
+    block.append(glyph, label);
     ui.previewContent.append(block);
   };
 

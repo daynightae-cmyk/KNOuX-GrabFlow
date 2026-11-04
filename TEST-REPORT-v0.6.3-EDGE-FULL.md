@@ -171,6 +171,18 @@ These came out of running the tests, not from reading the code.
    actually handles the IP-vs-name mismatch, so verification is now fully on, and CI has a grep
    gate that fails if `check_hostname = False` or `CERT_NONE` returns. Found by SonarCloud's
    Security Rating on New Code.
+9. **FFmpeg stderr was read only after stdout closed.** A pipe holds a limited
+   buffer; a real assembly with many failing segments writes more than that and FFmpeg then
+   blocks on stderr while we block on stdout — a deadlock that would surface as a hung assembly,
+   not an error. stderr is now drained on its own thread into a bounded 40-line ring, which also
+   caps memory. `tests/test-companion-protocol.py` step [12] proves it with 2000 warning lines:
+   `STDERR_DRAINED job finished without deadlock; progress_frames=1 bytes_seen=4096`.
+10. **A framing error in the native protocol would spin the host.** `run_host` caught a short,
+    oversized or unparseable frame, replied, and looped — but a length-prefixed stream cannot be
+    resynchronised, so it would emit errors forever. It now ends the session after reporting.
+11. **Two `innerHTML` assignments in the shipped popup** were flagged by SonarCloud's Security
+    Rating and removed; the empty-state and CORS blocks are built with `createElement`.
+
 8. **The Edge test's own step 9 was invalid** — it acted on discovery rows while the popup was in
    Download Manager view, and it re-seeded assets without their `name`. It only surfaced once the
    `[hidden]` fix above made hidden panels genuinely hidden, which is the correct behaviour.

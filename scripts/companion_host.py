@@ -24,6 +24,7 @@ Long-running jobs are assembled on a worker thread so the host stays responsive
 and can honour a real `cancel` request while FFmpeg is running.
 """
 
+import collections
 import ipaddress
 import json
 import os
@@ -54,6 +55,7 @@ DEFAULT_ASSEMBLE_TIMEOUT = 3600
 PROBE_TIMEOUT = 20
 FETCH_TIMEOUT = 15
 PROGRESS_INTERVAL = 1.0                   # seconds between progress frames
+STDERR_KEEP_LINES = 40                      # bounded FFmpeg diagnostics ring
 
 # FFmpeg may only use these transports and may only dereference these file
 # types from a playlist. Anything else (file:, data:, arbitrary extensions)
@@ -454,13 +456,13 @@ def read_message(stream=sys.stdin.buffer):
     if len(raw_length) == 0:
         return None
     if len(raw_length) < 4:
-        raise IOError('Incomplete message length received from browser')
+        raise OSError('Incomplete message length received from browser')
     message_length = struct.unpack('<I', raw_length)[0]
     if message_length > MAX_MESSAGE_BYTES:
         raise ValueError(f'Message length exceeds maximum allowed limit: {message_length}')
     message_data = stream.read(message_length)
     if len(message_data) < message_length:
-        raise IOError('Incomplete message body received from browser')
+        raise OSError('Incomplete message body received from browser')
     return json.loads(message_data.decode('utf-8'))
 
 
@@ -475,11 +477,10 @@ def write_message(message, stream=sys.stdout.buffer):
 class _Job:
     """One assembly job: process handle, progress snapshot and abort flag."""
 
-    def __init__(self, job_id, url, out_path, allow_local):
+    def __init__(self, job_id, url, out_path):
         self.job_id = job_id
         self.url = url
         self.out_path = out_path
-        self.allow_local = allow_local
         self.proc = None
         self.thread = None
         self.cancelled = False
@@ -520,8 +521,8 @@ class CompanionHost:
             write_message(message)
         try:
             self.emitter(message)
-        except Exception:
-            pass
+        except OSError:
+            pass   # a diagnostic sink must never break the protocol
 
     def handle_ping(self, msg):
         ffmpeg, ffprobe = find_binaries()
@@ -640,7 +641,7 @@ class CompanionHost:
             return {'action': 'assemble_result', 'jobId': job_id,
                     'status': 'failed', 'error': 'FFmpeg executable is not available'}
 
-        job = _Job(job_id, url, out_path, self.allow_local)
+        job = _Job(job_id, url, out_path)
         job.duration_us = int(duration_hint * 1_000_000)
         job.audit = audit
         self.jobs[job_id] = job
@@ -684,6 +685,27 @@ class CompanionHost:
 
         job.proc = proc
         self.active_processes[job.job_id] = proc
+        # stderr is drained on its own thread into a bounded ring. Reading it only
+        # after stdout closes would deadlock the moment a long assembly emits more
+        # warnings than the OS pipe holds, and an unbounded capture would let a
+        # chatty stream grow memory without limit.
+        stderr_tail = collections.deque(maxlen=STDERR_KEEP_LINES)
+        stderr_done = threading.Event()
+
+        def drain_stderr():
+            try:
+                for line in proc.stderr:
+                    text = line.rstrip()
+                    if text:
+                        stderr_tail.append(text)
+            except (OSError, ValueError):
+                pass   # the pipe closes when the process is terminated
+            finally:
+                stderr_done.set()
+
+        stderr_thread = threading.Thread(target=drain_stderr, daemon=True)
+        stderr_thread.start()
+
         deadline = time.time() + timeout
         last_emit = 0.0
         try:
@@ -713,15 +735,13 @@ class CompanionHost:
                     proc.kill()
                     return self._finish(job, 'timeout', 'Assembly timed out')
             proc.stdout.close()
-            stderr = proc.stderr.read() if proc.stderr else ''
-            if proc.stderr:
-                proc.stderr.close()
+            stderr_thread.join(timeout=30)
             code = proc.wait(timeout=30)
             if job.cancelled:
                 return self._finish(job, 'cancelled', 'Assembly cancelled by user')
             if code != 0:
-                return self._finish(job, 'failed', (stderr or '').strip()[:400]
-                                    or f'FFmpeg exited with code {code}')
+                detail = ' '.join(stderr_tail).strip()[:400]
+                return self._finish(job, 'failed', detail or f'FFmpeg exited with code {code}')
             if not job.out_path.is_file() or job.out_path.stat().st_size == 0:
                 return self._finish(job, 'failed', 'Output file was not created or is empty')
             size = job.out_path.stat().st_size
@@ -854,14 +874,17 @@ def run_host():
         while True:
             try:
                 msg = read_message(stdin)
-            except (IOError, ValueError, json.JSONDecodeError) as exc:
-                host.emit({'action': 'error', 'error': str(exc)})
-                continue
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                # A length-prefixed stream cannot be resynchronised once a frame is
+                # short, oversized or unparseable. Reporting it and looping would
+                # spin forever on the same bytes, so the session ends here.
+                host.emit({'action': 'error', 'error': f'unrecoverable framing error: {exc}'})
+                return
             if msg is None:
-                break
+                return
             try:
                 host.emit(host.dispatch(msg))
-            except Exception as exc:  # never let one bad request kill the session
+            except Exception as exc:  # noqa: BLE001 - one bad request must not kill the session
                 host.emit({'action': 'error', 'error': str(exc),
                            'requestId': msg.get('requestId')})
 

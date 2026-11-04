@@ -338,6 +338,54 @@ not attributed to new code:
 `scripts/assemble_stream.py` also grew `prepare()` to separate validation from execution and keep
 `main()` readable.
 
+## Two findings resolved as reviewed false positives — disclosed
+
+After the fixes above, two `pythonsecurity` findings remained, both on code written to prevent the
+class they were flagged for. Three structural attempts were made before the review:
+
+| Finding | What was tried | Outcome |
+|---|---|---|
+| `S8701` on `run_assembly` | allowlisted URL regex, canonical re-serialisation, `assert_argv_safe`, explicit `shell=False`, argv assembled in place beside each check | still flagged |
+| `S8703` on `_pinned_connect` | address re-check immediately before `create_connection`, policy-aware, plus the existing TLS hostname assertion | still flagged |
+
+Both are recorded on SonarCloud as **false positive** with a written justification on the issue
+itself, not suppressed silently and not resolved by lowering a threshold:
+
+- `run_assembly` builds its argument vector from literals plus three values, each admitted by a
+  check on the line above it. There is no shell. Option injection needs a URL beginning with `-`
+  (excluded) or a smuggled newline (excluded). Covered by tests.
+- `_pinned_connect` **is** the SSRF defence: it dials an address that `resolve_public_addresses`
+  already validated against `ipaddress.is_global`, re-checks it at the socket, and asserts TLS
+  hostname verification afterwards. The "taint" the rule follows is the user-selected media URL,
+  which is the product's entire purpose.
+
+The quality gate on the pull request after this review:
+
+```
+status: OK
+  new_security_rating            = 1 (A)
+  new_reliability_rating         = 1 (A)
+  new_maintainability_rating     = 1 (A)
+  new_duplicated_lines_density   = 0.0
+  new_security_hotspots_reviewed = 100%
+```
+
+## A real bug the CLI audit exposed
+
+Wiring the nested-reference audit into the command-line assembler made the DASH matrix fail, and
+the reason was not the audit: the shared extractor scanned manifests **line by line**. XML
+attributes may legally span lines, so a wrapped `<MPD ...>` element yielded
+`xmlns:xlink="http://www.w3.org/1999/xlink"` and
+`xsi:schemaLocation="urn:mpeg:DASH:schema:MPD:2011 http://..."` as if they were nested media
+references. A perfectly ordinary ffmpeg-generated MPD was then rejected as an SSRF attempt — a
+false positive that broke a supported format.
+
+DASH is now scanned by tag with a negative lookbehind on the attribute name, and values containing
+whitespace or a `urn:` / `data:` / `blob:` prefix are skipped as declarations rather than rejected.
+`SegmentTemplate@media` was added to the attribute set at the same time: a manifest describing its
+segments only through `media` would previously have audited as "zero references", which reads as
+clean when it is really unexamined. Two regression tests cover both.
+
 ## Not verified, stated plainly
 
 - Microsoft Partner Center enrolment, submission and review ID: untouched. No store page was

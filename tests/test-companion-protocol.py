@@ -15,7 +15,6 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 import queue
-import shutil
 import struct
 import subprocess
 import sys

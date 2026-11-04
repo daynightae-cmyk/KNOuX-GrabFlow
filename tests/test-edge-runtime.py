@@ -260,14 +260,18 @@ def run():
                         host: document.getElementById('pageHost').textContent,
                         total: document.getElementById('totalCount').textContent,
                         assets: state.assets.map(a => ({type:a.type, format:a.format||null,
-                                                        source:a.source, url:a.url}))})""")
+                                                        source:a.source, url:a.url, name:a.name,
+                                                        width:a.width||0, height:a.height||0,
+                                                        poster:a.poster||null}))})""")
                 else:
                     discovered = popup.evaluate("""() => ({
                         route: 'extension-scripting',
                         host: document.getElementById('pageHost').textContent,
                         total: document.getElementById('totalCount').textContent,
                         assets: state.assets.map(a => ({type:a.type, format:a.format||null,
-                                                        source:a.source, url:a.url}))})""")
+                                                        source:a.source, url:a.url, name:a.name,
+                                                        width:a.width||0, height:a.height||0,
+                                                        poster:a.poster||null}))})""")
                 urls = {a["url"] for a in discovered["assets"]}
                 assert any(u.endswith("emblem.png") for u in urls), discovered
                 assert any(u.endswith("clip.mp4") for u in urls), discovered
@@ -343,7 +347,6 @@ def run():
                       f"size={job['fileSize']} finalName={Path(job['filename']).name}")
 
                 # ---- 7. the headline fix: progress survives closing the popup --
-                job_id = record["id"]
                 popup.close()
                 time.sleep(2.0)          # the popup document is gone entirely
                 reopened = context.new_page()
@@ -390,11 +393,19 @@ def run():
                         "title": "KNOuX Edge QA Fixture", "domain": "127.0.0.1",
                         "pageUrl": f"http://127.0.0.1:{port}/page.html",
                         "assets": discovered["assets"], "truncated": False})
+                    # Step 7 left the popup in Download Manager view; discovery rows
+                    # live in the scanner panel, which is genuinely hidden now.
+                    reopened.evaluate("""() => {
+                        if (document.getElementById('scannerView').hidden) {
+                            document.getElementById('managerToggleBtn').click();
+                        }
+                    }""")
                     reopened.evaluate("""() => {
                         state.filter = 'video';
                         document.getElementById('search').value = 'clip';
                         render();
                     }""")
+                    reopened.wait_for_timeout(400)
                     reopened.locator(".asset input[type=checkbox]").first.check()
                     reopened.locator("#downloadBtn").click()
                     video_record = None

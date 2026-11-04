@@ -165,6 +165,16 @@ These came out of running the tests, not from reading the code.
    the stream suites silently SKIPped on this machine and reported nothing. Replaced by an
    explicit resolver that also honours portable builds.
 
+7. **TLS hostname verification was disabled in the pinned socket.** `_pinned_connect` set
+   `context.check_hostname = False` while dialling a validated IP. That is a real weakening: a
+   valid certificate for *any* host would have been accepted. Passing `server_hostname` is what
+   actually handles the IP-vs-name mismatch, so verification is now fully on, and CI has a grep
+   gate that fails if `check_hostname = False` or `CERT_NONE` returns. Found by SonarCloud's
+   Security Rating on New Code.
+8. **The Edge test's own step 9 was invalid** — it acted on discovery rows while the popup was in
+   Download Manager view, and it re-seeded assets without their `name`. It only surfaced once the
+   `[hidden]` fix above made hidden panels genuinely hidden, which is the correct behaviour.
+
 ## Not verified, stated plainly
 
 - Microsoft Partner Center enrolment, submission and review ID: untouched.

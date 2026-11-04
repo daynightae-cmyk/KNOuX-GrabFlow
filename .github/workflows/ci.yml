@@ -27,6 +27,16 @@ jobs:
         run: node tests/test-utilities.cjs
       - name: VS Code companion contract tests
         run: node tests/test-vscode-companion.cjs
+      - name: Python lint gate (unused imports and dead locals fail the build)
+        run: |
+          python3 -m pip install --quiet pyflakes
+          python3 -m pyflakes scripts/*.py tests/*.py
+      - name: TLS verification must never be relaxed in the companion host
+        run: |
+          if grep -nE "check_hostname\s*=\s*False|verify_mode\s*=\s*ssl\.CERT_NONE" scripts/companion_host.py; then
+            echo "BLOCKED: pinned-socket TLS verification was disabled" >&2
+            exit 1
+          fi
       - name: Native companion host contract tests
         run: python3 tests/test-companion-host.py
       - name: Native Messaging trust boundary regression tests

@@ -1,8 +1,7 @@
 """Local-only functional HLS-to-MP4 test. Requires ffmpeg/ffprobe; skips if absent."""
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-import functools, json, shutil, subprocess, sys, tempfile, threading
-from unittest import SkipTest
+import functools, json, subprocess, sys, tempfile, threading
 import media_tools
 
 ROOT=Path(__file__).resolve().parents[1]

@@ -7,12 +7,10 @@ subtitles, MIME inspection, download lifecycle, bilingual RTL/LTR UI, and captur
 
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import json
-import os
 from pathlib import Path
 import socket
 import sys
 import threading
-import time
 from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright

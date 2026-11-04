@@ -2,7 +2,6 @@
 """Comprehensive security and contract tests for Native Companion Host."""
 
 import io
-import json
 from pathlib import Path
 import struct
 import sys
@@ -49,14 +48,19 @@ class CompanionHostTests(unittest.TestCase):
 
     def test_ssrf_and_credential_rejections(self):
         strict_host = CompanionHost(allow_local=False)
-        with self.assertRaises(ValueError):
-            validate_media_url('https://user:pass@example.com/stream.m3u8', allow_local=False)
-        with self.assertRaises(ValueError):
-            validate_media_url('file:///etc/passwd', allow_local=False)
-        with self.assertRaises(ValueError):
-            validate_media_url('javascript:alert(1)', allow_local=False)
-        with self.assertRaises(ValueError):
-            validate_media_url('https://127.0.0.1/stream.m3u8', allow_local=False)
+        for url in (
+            'https://user:pass@example.com/stream.m3u8',
+            'file:///etc/passwd',
+            'javascript:alert(1)',
+            'https://127.0.0.1/stream.m3u8',
+        ):
+            # Direct helper, strict by default.
+            with self.subTest(direct=url), self.assertRaises(ValueError):
+                validate_media_url(url, allow_local=False)
+            # And through the shipped dispatch path, so the policy cannot be
+            # bypassed by choosing a different entry point.
+            with self.subTest(dispatch=url), self.assertRaises(ValueError):
+                strict_host.handle_probe({'url': url})
 
     def test_destination_safety_and_no_clobber(self):
         with tempfile.TemporaryDirectory() as td:

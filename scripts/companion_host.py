@@ -60,13 +60,6 @@ PROGRESS_INTERVAL = 1.0                   # seconds between progress frames
 # is refused before a byte is written.
 ALLOWED_PROTOCOLS = "file,http,https,tcp,tls,crypto"
 ALLOWED_PLAYLIST_EXTENSIONS = "m3u8,ts,m4s,mp4,mkv,webv,vtt,srt,ssa,aac,ac3,eac3,mp3,opus"
-NESTED_REF_RE = re.compile(
-    r'(?:URI="([^"]+)"|'                    # EXT-X-KEY / EXT-X-MAP / EXT-X-MEDIA
-    r'SourceURL="([^"]+)"|'                 # DASH Representation
-    r'BaseURL="([^"]+)"|'                   # DASH BaseURL element text handled separately
-    r'^([^#\s][^\s]*)$)'                    # bare segment line in HLS
-)
-
 
 class MediaPolicyError(ValueError):
     """A security rule was broken. The caller must refuse the request."""
@@ -230,14 +223,17 @@ def find_binaries():
 # --- Pinned, redirect-aware manifest fetch -----------------------------------
 
 def _pinned_connect(scheme, hostname, port, address, timeout):
-    """Open a socket to an already-validated address, keeping TLS hostname checks."""
+    """Open a socket to an already-validated address, keeping full TLS verification.
+
+    The TCP connection dials the audited IP while SNI and certificate validation
+    still use the original hostname, so pinning closes the DNS-rebinding window
+    without weakening trust: the peer certificate is verified against the real
+    host name, and neither check_hostname nor verify_mode is relaxed.
+    """
     raw = socket.create_connection((address, port), timeout=timeout)
     if scheme != 'https':
         return raw, None
     context = ssl.create_default_context()
-    # The peer certificate is still validated against the *original* hostname;
-    # we merely pin which IP the TCP connection dials.
-    context.check_hostname = False
     wrapped = context.wrap_socket(raw, server_hostname=hostname)
     return wrapped, hostname
 

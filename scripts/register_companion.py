@@ -44,15 +44,28 @@ def build_manifest(extension_id, host_path):
     }
 
 
-def _write_host_files(extension_id, install_dir):
-    """Write the batch wrapper and JSON manifest; returns (bat, manifest) paths."""
+def _write_host_files(extension_id, install_dir, extra_env=None):
+    """Write the batch wrapper and JSON manifest; returns (bat, manifest) paths.
+
+    `extra_env` is embedded as SET lines in the launcher so a portable FFmpeg
+    install, or a deliberate test policy, can be recorded at registration time
+    instead of depending on the caller's shell environment. These are local
+    environment inputs; a browser message can never set or change them.
+    """
     python_exe = sys.executable
     host_py = SCRIPT_DIR / "companion_host.py"
     # Generated machine-specific files stay outside the Git source tree.
     install_dir.mkdir(parents=True, exist_ok=True)
     bat_file = install_dir / "companion_host.bat"
-    bat_content = f"@echo off\r\n\"{python_exe}\" \"{host_py}\" %*\r\n"
-    bat_file.write_text(bat_content, encoding='utf-8')
+    lines = ["@echo off"]
+    for key, value in sorted((extra_env or {}).items()):
+        if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key):
+            raise ValueError(f'Invalid environment variable name: {key}')
+        if '\r' in str(value) or '\n' in str(value):
+            raise ValueError(f'Environment value for {key} must be a single line')
+        lines.append(f'SET "{key}={value}"')
+    lines.append(f'"{python_exe}" "{host_py}" %*')
+    bat_file.write_text("\r\n".join(lines) + "\r\n", encoding='utf-8')
 
     manifest_file = install_dir / "com.knoux.grabflow.companion.json"
     manifest_file.write_text(json.dumps(build_manifest(extension_id, bat_file), indent=2),
@@ -90,12 +103,12 @@ def select_browsers(names):
     return {name: REGISTRY_ROOTS[name] for name in names}
 
 
-def register(extension_id=None, browsers=DEFAULT_BROWSERS):
+def register(extension_id=None, browsers=DEFAULT_BROWSERS, extra_env=None):
     extension_id = validate_extension_id(extension_id)
     keys = select_browsers(browsers)
     install_dir = Path(os.environ.get('LOCALAPPDATA') or Path.home() / '.knoux') \
         / 'KNOuX' / 'GrabFlow'
-    bat_file, manifest_file = _write_host_files(extension_id, install_dir)
+    bat_file, manifest_file = _write_host_files(extension_id, install_dir, extra_env)
     print(f"Manifest: {manifest_file}")
     print(f"Batch Host: {bat_file}")
     if sys.platform != 'win32':
@@ -119,13 +132,24 @@ def main():
     parser.add_argument("--browser", default="both",
                         choices=["chrome", "edge", "both"],
                         help="Which browser(s) to register (default: both)")
+    parser.add_argument("--env", action="append", default=[], metavar="NAME=VALUE",
+                        help="Record an environment variable in the generated launcher, e.g. "
+                             "--env KNOUX_FFMPEG_DIR=D:\tools\ffmpeg\bin. Local input only; "
+                             "a browser message cannot set or change these.")
     args = parser.parse_args()
+
+    extra_env = {}
+    for item in args.env:
+        name, sep, value = item.partition('=')
+        if not sep:
+            parser.error(f'--env expects NAME=VALUE, got: {item}')
+        extra_env[name] = value
 
     browsers = list(DEFAULT_BROWSERS) if args.browser == "both" else [args.browser]
     if args.unregister:
         return unregister(browsers)
     try:
-        return register(args.extension_id, browsers)
+        return register(args.extension_id, browsers, extra_env)
     except ValueError as error:
         parser.error(str(error))
 

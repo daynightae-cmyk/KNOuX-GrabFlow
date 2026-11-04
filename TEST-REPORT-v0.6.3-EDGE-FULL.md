@@ -130,6 +130,40 @@ NOT VERIFIED: physical toolbar action, activeTab grant, HLS/DASH assembly via na
 `tests/test-e2e-matrix.py`: **ALL 20 FIXTURE MATRIX TESTS PASSED**.
 `tests/test-ui.py` and `tests/test-ui-inmemory.py`: PASS, no page errors.
 
+## Live Edge -> native host -> FFmpeg end-to-end (new)
+
+`tests/test-edge-native-e2e.py`, exit **0**. This is the evidence the handoff called missing:
+not a Python-side protocol test, but the branded Edge extension talking to a registered
+companion host and producing a real file.
+
+```
+[0] EDGE_HOST_NOT_PREVIOUSLY_REGISTERED - safe to proceed
+[1] DERIVED_EDGE_EXTENSION_ID khjchfbpeoiefclibnoojmkicbaglhei
+[2] EDGE_HOST_REGISTERED key=HKCU\Software\Microsoft\Edge\NativeMessagingHosts\com.knoux.grabflow.companion
+[3] EDGE_TO_NATIVE_HANDSHAKE version=0.6.3 policy=test-relaxed pill='COMPANION: CONNECTED'
+[4] EDGE_LIVE_ASSEMBLY samples=9 with_progress=3 bytes=1042878 nestedAuditChecked=8
+      pending             0 B    0%
+      in_progress    262192 B   50%
+[5] EDGE_PRODUCED_FILE master.mp4 1042878 bytes duration=16.04s tracks=['audio','video']
+EDGE_NATIVE_E2E_PASS assembly=verified-by-ffprobe
+[6] REGISTRY_KEY_REMOVED + launcher and manifest deleted
+```
+
+The pill read `COMPANION: CONNECTED` because the handshake really happened. Progress was read
+from the shipped Download Manager DOM, not from an internal variable. The output was probed by
+real ffprobe for duration and both track types. The registry key and generated files belong to
+this test and were removed afterwards; the test refuses to run if a companion host is already
+registered, so a real user installation is never overwritten.
+
+Loopback media was explicitly relaxed for the local fixture via the launcher environment, and the
+host reported `policy=test-relaxed`. The shipped default still blocks private addresses, asserted
+in the protocol suite.
+
+Running this surfaced a real naming defect: `safeDownloadName` keeps the playlist name for an HLS
+asset, so the assembled file was written as **`master.m3u8.mp4`**. The playlist suffix is now
+dropped before the media suffix, and `tests/test-companion-host.py` covers it - the rerun produced
+`master.mp4`.
+
 ## Packaging
 
 `python scripts/package.py`:

@@ -30,6 +30,14 @@ By default this registers **both** browsers. To limit it:
 
 Or run `scripts\install-companion.bat --extension-id YOUR_32_LETTER_EXTENSION_ID`.
 
+If FFmpeg is a portable build rather than on `PATH`, record it in the generated launcher so the
+host finds it without depending on a shell environment:
+
+    python scripts\register_companion.py --extension-id ... --env KNOUX_FFMPEG_DIR=D:\tools\ffmpeg\bin
+
+These are local environment inputs written at registration time. A browser message can never set
+them, and the host reports which policy and toolchain it resolved.
+
 The installer does NOT auto-detect your extension ID. The exact 32-character ID is mandatory.
 Wildcards are invalid and rejected by the browsers. Registration generates a host launcher and
 manifest under `%LOCALAPPDATA%\KNOuX\GrabFlow` and writes the matching HKCU keys:

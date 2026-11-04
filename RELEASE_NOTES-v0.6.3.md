@@ -92,11 +92,19 @@ This branch reconciles the v0.6.2 Edge QA candidate into the tracked source and 
 - Nothing was removed. No branch, worktree or feature was deleted; the Direct-only candidate and
   the untracked `v0.6.2/` release metadata are untouched.
 
+### Live Edge to native assembly
+`tests/test-edge-native-e2e.py` registers the host for Edge only, drives the branded Edge
+extension to a real handshake, starts an assembly from the shipped UI, reads progress from the
+shipped Download Manager DOM, and ffprobes the produced file: 1 042 878 bytes, 16.04 s, video +
+audio. Registry key and generated launcher are removed afterwards, and the test refuses to run if
+a companion host is already registered. `register_companion.py` gained `--env NAME=VALUE` so a
+portable FFmpeg install can be recorded in the launcher at registration time. This surfaced and
+fixed the `master.m3u8.mp4` naming defect.
+
 ## Gates still open before any Full Release claim
 - Microsoft Partner Center enrolment, submission and review ID are unverified.
 - The physical toolbar click and the `activeTab` grant it provides cannot be exercised by
   automation; discovery is verified by running the shipped scanner function, not by a fixture list.
-- Native messaging handshake through Edge specifically is not covered here — the Edge run reports
-  `Specified native messaging host not found` truthfully. Chrome handshake coverage remains in
-  `tests/test-real-native-messaging-win.py`.
+- Third-party CDN streams are untested: the live assembly used a local fixture with loopback
+  deliberately relaxed and reported by the host.
 - Store-listing assets and screenshots need refreshing for the new identity.

@@ -103,6 +103,10 @@ def resolve_safe_output(out_str: str) -> Path:
     if not downloads.exists():
         downloads = Path.home()
     safe_name = re.sub(r'[\x00-\x1f<>:"/\\|?*]', '_', p.name).strip(' .')[:120]
+    # An HLS/DASH asset keeps its playlist name through the UI, so assembling it
+    # verbatim produced "master.m3u8.mp4". The playlist suffix describes a recipe,
+    # not the container being written, so it is dropped before the media suffix.
+    safe_name = re.sub(r'\.(?:m3u8|mpd)$', '', safe_name, flags=re.IGNORECASE)
     if not safe_name or re.match(r'(?i)^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)', safe_name):
         raise ValueError('Invalid output filename')
     if not safe_name.lower().endswith(('.mp4', '.mkv')):

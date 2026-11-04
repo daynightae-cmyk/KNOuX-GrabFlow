@@ -1,4 +1,4 @@
-# KNOuX GrabFlow™ — Full Edition (v0.6.5)
+# KNOuX GrabFlow™ — Full Edition (v0.6.6)
 
 **Intelligent Video & Web Asset Discovery. Private by design. Beautifully engineered.**
 
@@ -6,14 +6,14 @@ An independent KNOuX LABS browser extension for Microsoft Edge and Chrome: disco
 save accessible video files, adaptive stream playlists, audio, images and downloadable documents.
 Bilingual English/Arabic (RTL), local-only, zero telemetry, no hosted backend.
 
-> **Read `RELEASE_NOTES-v0.6.5.md` and `TEST-REPORT-v0.6.5-EDGE-FULL.md` first.** The sections
+> **Read `RELEASE_NOTES.md` and `TEST-REPORT-EDGE-FULL.md` first.** The sections
 > below describe the v0.6.0–v0.6.1 baseline and several of their statements are now superseded —
 > in particular "native assembly cancellation is disabled" (it works now), "one-shot request;
 > continuous progress not verified" (progress streams and is tested), and the violet-only
 > "Obsidian Glass 2.0" palette (the identity is now the cyan → violet neon of the orb mark).
 > This is an engineering build with real Edge 156 evidence, not a store-approved release.
 
-## What the v0.6.3 work added (shipped as v0.6.4)
+## What the v0.6.3 work added (shipped as v0.6.6)
 
 | Area | Before | Now |
 |---|---|---|

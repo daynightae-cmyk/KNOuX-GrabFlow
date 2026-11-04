@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "__MSG_appName__",
-  "short_name": "KNOuX GrabFlow",
+  "short_name": "GrabFlow",
   "default_locale": "en",
   "description": "__MSG_appDesc__",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "minimum_chrome_version": "110",
   "permissions": [
     "activeTab",

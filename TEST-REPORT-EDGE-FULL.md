@@ -1,4 +1,4 @@
-# KNOuX GrabFlow v0.6.5 — Test Report (Full Edition, Microsoft Edge)
+# KNOuX GrabFlow — Test Report (Full Edition, Microsoft Edge)
 
 Executed on the development device on 2026-11-04. Every number below is copied from command
 output, not restated from a plan. Nothing in this report is a claim about the store, and no
@@ -12,7 +12,8 @@ Two builds of this work exist and must not be confused:
 |---|---|---|---|---|
 | Engineering build | merged as `dc7b0fd` | 0.6.3 | `b8aa2aad20eb61a023a72b2c310a4a157f612d63d14bd0b6c0171b7e1b3cdb5c` (164 471 B) | merged; superseded |
 | First closure build | merged as `4a54385` | 0.6.4 | `6e9a2b7c…082bf26` (165 445 B) | superseded before publication |
-| This report | `fix/grabflow-v0.6.4-bootstrap-catch` | **0.6.5** | recorded in the Packaging section below | release candidate |
+| Bootstrap fix | merged as `328f8d2` | 0.6.5 | `a56c6918…32732a3a` (165 732 B) | superseded before publication |
+| **This report** | store-manifest fix | **0.6.6** | recorded in the Packaging section below | **upload candidate** |
 
 An earlier report also referenced `b855ee03faadef818b86f86c198a60f8fef0e5ccb917226b6b8e467e12fdfccd`
 (163 547 B). That was an interim build produced before the last round of Sonar-driven source
@@ -193,15 +194,44 @@ asset, so the assembled file was written as **`master.m3u8.mp4`**. The playlist 
 dropped before the media suffix, and `tests/test-companion-host.py` covers it - the rerun produced
 `master.mp4`.
 
-## Packaging (v0.6.5 release candidate)
+## Store package validation — the blocker the dashboard found
+
+Uploading to Partner Center surfaced what no test had checked: the *manifest* broke the store's own
+length rules. Edge reported it directly.
+
+> Package Validation Warnings:
+> - The string KNOuX GrabFlow has exceeded the maximum length of 12. Code: `short_name`, KNOuX GrabFlow Line: 4 Column: 32
+
+Measuring every length-limited field found **three** violations, not one:
+
+| Field | Was | Limit | Now |
+|---|---|---|---|
+| `short_name` | `KNOuX GrabFlow` — 14 chars | 12 | `GrabFlow` — 8 |
+| `_locales/en` `appDesc` | 166 chars | 132 | 129 |
+| `_locales/ar` `appDesc` | 150 chars | 132 | 98 |
+| `_locales/*` `appName` | 37 chars | 75 | unchanged |
+| `action.default_title` | 14 chars | 75 | unchanged |
+
+`scripts/package.py` now enforces these limits before writing a single byte of the archive: it
+reads the manifest and every `_locales/<lang>/messages.json`, checks `short_name` ≤ 12,
+`name` ≤ 75 and `description` ≤ 132, requires `default_locale` to have a real directory, and fails
+the build with the measured lengths. Verified in both directions — reintroducing
+`short_name: "KNOuX GrabFlow"` fails with `short_name is 14 chars, limit 12`, and a 140-char
+description fails with `en: appDesc is 140 chars, limit 132 (8 over)`.
+
+Two thirds of this class of defect is invisible in a browser: an over-long description does not
+break the extension, only the submission.
+
+## Packaging (v0.6.6 upload candidate)
 
 `python scripts/package.py`:
 
 ```
-PACKAGED D:\KNOUX-Workspace\KNOuX-GrabFlow-CHROME-v0.6.5.zip (165732 bytes, 12 files)
-PACKAGED D:\KNOUX-Workspace\KNOuX-GrabFlow-EDGE-v0.6.5.zip   (165732 bytes, 12 files)
-VERIFIED KNOuX-GrabFlow-CHROME-v0.6.5.zip a56c6918617f7268523172634f18d56aeb05fb1b904020ba0d2b715632732a3a
-VERIFIED KNOuX-GrabFlow-EDGE-v0.6.5.zip   a56c6918617f7268523172634f18d56aeb05fb1b904020ba0d2b715632732a3a
+STORE MANIFEST VALIDATION OK (short_name 8/12, locales: ar, en)
+PACKAGED D:\KNOUX-Workspace\KNOuX-GrabFlow-CHROME-v0.6.6.zip (165627 bytes, 12 files)
+PACKAGED D:\KNOUX-Workspace\KNOuX-GrabFlow-EDGE-v0.6.6.zip   (165627 bytes, 12 files)
+VERIFIED KNOuX-GrabFlow-CHROME-v0.6.6.zip 2143e9148f048c911b88b3ae13772171a44d6f9d274882e1a854fafc6cad6001
+VERIFIED KNOuX-GrabFlow-EDGE-v0.6.6.zip   2143e9148f048c911b88b3ae13772171a44d6f9d274882e1a854fafc6cad6001
 ```
 
 The two archives are byte-identical because both browsers consume the same Manifest V3 payload;
@@ -218,14 +248,15 @@ Artifact audit performed on the Edge zip:
 | `host_permissions` | absent |
 | Background service worker | `background.js` |
 | Locales | `_locales/en`, `_locales/ar` |
+| Store length limits | PASS — see the section above |
 | Icons | 16 / 48 / 128 |
 | SHA-256 re-read and verified | PASS |
 | Secrets, `.env`, `.pem`, `node_modules`, `.git/`, machine paths | none present |
-| Corresponds to the tested source SHA | the closure commit that produced it; see the final delivery |
+| Packaged bytes vs working tree | identical |
 
-`RELEASE_CHECKSUMS-v0.6.5.sha256` records both digests and the script re-reads and re-verifies it
-before exiting. `RELEASE_CHECKSUMS-v0.6.3.sha256` and `-v0.6.4.sha256` are left in place as the record of
-superseded builds.
+`RELEASE_CHECKSUMS-v0.6.6.sha256` records both digests and the script re-reads and re-verifies it
+before exiting. `-v0.6.3`, `-v0.6.4` and `-v0.6.5` are left in place as the record of superseded
+builds.
 
 ## Defects found and fixed during this testing
 

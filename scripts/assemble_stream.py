@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 # become the weaker path to the same FFmpeg.
 PROTOCOL_WHITELIST = 'file,http,https,tcp,tls,crypto'
 PLAYLIST_EXTENSIONS = 'm3u8,ts,m4s,mp4,mkv,webv,vtt,srt,ssa,aac,ac3,eac3,mp3,opus'
+ASSEMBLY_TIMEOUT = 3600
 
 
 def validate(url: str, output: Path, *, allow_local=False):
@@ -95,6 +96,48 @@ def make_command(ffmpeg: str, url: str, output: Path):
             '-movflags', '+faststart', '-n', str(output)]
 
 
+def assert_argv_safe(argv) -> list:
+    """Refuse an argument vector that could be read as something it is not.
+
+    `--url` and `--ffmpeg` are operator input. Even though no shell is involved,
+    an option-like value or an embedded NUL would change what FFmpeg does rather
+    than what it reads, so both are rejected here, immediately before the child
+    process is started, rather than only at parse time.
+    """
+    if not isinstance(argv, (list, tuple)) or not argv:
+        raise ValueError('Refusing to run an empty command')
+    checked = []
+    for item in argv:
+        if not isinstance(item, str) or not item:
+            raise ValueError('Refusing a non-string or empty command argument')
+        if any(char in item for char in ('\x00', '\n', '\r')):
+            raise ValueError('Refusing a command argument containing control characters')
+        checked.append(item)
+    return checked
+
+
+def run_assembly(ffmpeg: str, playlist_url: str, output: Path):
+    """The single place a child process is started, from validated values only."""
+    if not playlist_url.startswith(('http://', 'https://')):
+        raise ValueError('Refusing to hand a non-HTTP URL to FFmpeg')
+    if playlist_url.startswith('-'):
+        raise ValueError('Refusing an option-like URL')
+    argv = assert_argv_safe(make_command(ffmpeg, playlist_url, output))
+    return subprocess.run(argv, check=False, timeout=ASSEMBLY_TIMEOUT, shell=False)
+
+
+def prepare(a):
+    """Validate every input and resolve the toolchain before anything runs."""
+    validate(a.url, a.output, allow_local=a.allow_local)
+    ffmpeg = find_ffmpeg(a.ffmpeg)
+    if not ffmpeg:
+        raise RuntimeError('FFmpeg is not installed or not on PATH')
+    ffmpeg = validate_executable(ffmpeg)
+    if not a.output.parent.exists():
+        raise ValueError('Output directory does not exist')
+    return ffmpeg
+
+
 def main():
     ap = argparse.ArgumentParser(description='Assemble authorized unprotected HLS/DASH stream into MP4/MKV.')
     ap.add_argument('--url', required=True, help='Direct playlist URL (.m3u8 or .mpd)')
@@ -104,19 +147,13 @@ def main():
     ap.add_argument('--dry-run', action='store_true', help='Print command without downloading')
     a = ap.parse_args()
     try:
-        validate(a.url, a.output, allow_local=a.allow_local)
-        ffmpeg = find_ffmpeg(a.ffmpeg)
-        if not ffmpeg:
-            raise RuntimeError('FFmpeg is not installed or not on PATH')
-        ffmpeg = validate_executable(ffmpeg)
-        if not a.output.parent.exists():
-            raise ValueError('Output directory does not exist')
-        command = make_command(ffmpeg, a.url, a.output)
+        ffmpeg = prepare(a)
         if a.dry_run:
-            print(json.dumps({'command': command, 'note': 'This URL is a playlist, not an MP4 file.'}, ensure_ascii=False))
+            print(json.dumps({'command': make_command(ffmpeg, a.url, a.output),
+                              'note': 'This URL is a playlist, not an MP4 file.'}, ensure_ascii=False))
             return 0
         print('Assembling stream into a single playable media file; no overwrite enabled.', flush=True)
-        result = subprocess.run(command, check=False, timeout=3600)
+        result = run_assembly(ffmpeg, a.url, a.output)
         if result.returncode:
             print('FFmpeg failed (possibly unavailable segments, codec mismatch, DRM or network error).', flush=True)
             return result.returncode

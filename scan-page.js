@@ -371,3 +371,10 @@ function scanPageAssets() {
     assets, truncated: assets.length >= LIMIT
   };
 }
+
+// The browser loads this file as a plain script, where `module` does not exist.
+// The Node test suite requires it directly, so the scanner is exercised as real
+// code instead of being evaluated from a string.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {scanPageAssets};
+}

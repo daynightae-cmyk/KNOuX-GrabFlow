@@ -1,0 +1,44 @@
+{
+  "GrabFlow-v0.6.7-Arabic-RTL-1280x800.png": {
+    "width": 1280,
+    "height": 800,
+    "bytes": 573051,
+    "sha256": "c8f87bfd4e46c8f983b7e4b69e260b42c17327d166b96b9beb0320022db2a399"
+  },
+  "GrabFlow-v0.6.7-Direct-Video-1280x800.png": {
+    "width": 1280,
+    "height": 800,
+    "bytes": 638120,
+    "sha256": "31c99917db94e3e875f79ac560bfc841c6e178cc52513b63943b6e7ff888778b"
+  },
+  "GrabFlow-v0.6.7-English-1280x800.png": {
+    "width": 1280,
+    "height": 800,
+    "bytes": 610829,
+    "sha256": "db84b5b9ae61ab524da8ef397b12af8d6e81456010e442400d7a5184ee4761ff"
+  },
+  "GrabFlow-v0.6.7-Icon-128x128.png": {
+    "width": 128,
+    "height": 128,
+    "bytes": 30752,
+    "sha256": "5e2cb1db90383c0fff02ec4e77019d249b7aa8a319e285248baaea0e7dea1799"
+  },
+  "GrabFlow-v0.6.7-Logo-300x300.png": {
+    "width": 300,
+    "height": 300,
+    "bytes": 86075,
+    "sha256": "d0b8277e88a0f6f83c79dc0d4891c6c4021dff546cd82841f3746514e016de81"
+  },
+  "GrabFlow-v0.6.7-Marquee-1400x560.png": {
+    "width": 1400,
+    "height": 560,
+    "bytes": 584577,
+    "sha256": "b2462802f01e0c0d40e58247deae5ae233c53637dc3bebd96d225d32d81d7a11"
+  },
+  "GrabFlow-v0.6.7-Promo-440x280.png": {
+    "width": 440,
+    "height": 280,
+    "bytes": 116195,
+    "sha256": "d7dcebd2646a85d32c1bdd7f9f2c96c5c0bb2ba43ff32f4037dc547239b6262f"
+  }
+}

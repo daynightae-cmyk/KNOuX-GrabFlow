@@ -133,6 +133,55 @@ The two browser packages carry the same payload. The ZIPs do **not** contain FFm
 FFprobe or the Python companion host; HLS/DASH assembly still requires the separately
 installed companion.
 
+## Post-tag submission kit and VSIX verification — 2026-11-05
+
+These checks were performed after tag `v0.6.7` was created. They do not change the
+tag, the browser source or the browser package hash.
+
+**Store kit**
+- `python scripts/validate-store-kit.py` ends with `STORE_KIT_VALID`.
+- Listing limits: Chrome name 37, short description 129, detailed description 1,649;
+  Arabic name 40, short description 101, detailed description 1,423; seven Edge
+  search terms / 14 words.
+- Manifest is MV3 version `0.6.7` with exactly `activeTab`, `scripting`, `downloads`,
+  `storage` and `nativeMessaging`.
+- Both browser ZIPs are recorded at SHA-256
+  `313f4d2c4b62fb8304af173198814218caec6cc9f92df4de2bbb2ab0b713e028`.
+- Seven 1280×800/440×280/1400×560/300×300/128×128 assets exist and match
+  `store-assets/0.6.7/ASSET_SHA256.json`.
+- The three screenshots use a real, unmodified crop of the unpacked-MV3 popup from
+  `tests/test-real-mv3.py`, placed on a branded backdrop. The rerun produced six
+  populated rows in both English and Arabic and a completed, FFprobe-verified MP4;
+  it reported `REAL_MV3_UNPACKED_PASS` and `SERVICE_WORKER_REGISTERED`.
+- `scripts/assemble-store-submission.py` assembled 16 files under
+  `_releases\KNOuX-GrabFlow-v0.6.7\store-submission\`, including the two packages,
+  all seven images, the kit, `PRIVACY.md`, this report and a SHA-256 manifest.
+  The bundle status remains **PREPARED, NOT SUBMITTED, NOT APPROVED, NOT PUBLISHED**.
+
+**VS Code companion VSIX**
+- `vscode-companion` metadata is `0.6.7`, publisher `knoux-labs`, with icon,
+  proprietary `LICENSE.txt`, repository/homepage, keywords, `files` allowlist and
+  four settings.
+- `python scripts/package-vscode.py` produced
+  `KNOuX-GrabFlow-VSCODE-v0.6.7.vsix` (58,599 bytes; SHA-256
+  `825338aa9cc9762518c1cc878c6feb5a2cf6fe82e5dcd35094057159bde3f67f`).
+- The VSIX contains exactly 10 entries: manifest/content types, `package.json`,
+  `extension.js`, `readme.md`, `changelog.md`, `LICENSE.txt`, the 128×128 icon,
+  and the bundled `companion/assemble_stream.py` + `companion/companion_host.py`.
+  Both helper files are byte-identical to `scripts/`.
+- Real extension-host test: `@vscode/test-electron` 3.1.0 downloaded VS Code
+  1.145.0, extracted the VSIX, and activated the packaged extension. The host
+  reported `EXTENSION_HOST_ACTIVATION_PASS`, all three commands registered, and
+  the resolver selected the bundled `companion/assemble_stream.py`.
+- `tests/test-vscode-companion.cjs` passes five contract checks, including a
+  mock-host activation and command-registration check.
+- The VSIX is **not** published to the VS Code Marketplace or Open VSX. No
+  Marketplace approval, listing, install count or certification is claimed.
+- On this Windows workstation the WinGet `Links\ffmpeg.exe` entry is a symbolic
+  link. The companion's existing symlink refusal was not relaxed; local stream
+  tests were run with `KNOUX_FFMPEG_DIR` pointing at the real
+  `...\ffmpeg-9.0.2-full_build\bin` directory. CI installs a regular apt FFmpeg.
+
 ## Preservation
 
 The pre-existing worktree
@@ -166,19 +215,30 @@ first recorded live evidence.
 - Both P0 defects fixed in source, unit/UI tests and the real Edge Inspect/assembly path.
 - Chrome/Edge MV3 load-unpacked, downloads, worker persistence, RTL/LTR.
 - Native messaging, real HLS/DASH assembly, progress, cancellation, FFprobe integrity.
+- Store kit passes the machine validator; the submission bundle is assembled with
+  checksums and explicit non-submission status.
+- Companion VSIX packages the two Python helpers and activates in a real VS Code
+  1.145.0 extension host with all three commands registered.
 
 **IMPLEMENTED BUT NOT FULLY VERIFIED**
 - Chrome package on the Chrome Web Store and Edge package in Partner Center; no store
   submission or certification was performed in this task.
+- The VS Code command path was not driven end-to-end through its InputBox/SaveDialog
+  UI in the extension host. Activation, command registration and bundled-helper
+  resolution were verified; a real FFmpeg assembly was verified separately through
+  the native companion and CLI tests.
 
 **UNVERIFIED / REMAINING HUMAN ACCEPTANCE**
 - Physical toolbar click granting `activeTab` (headless automation cannot reproduce it).
 - Actual OS clipboard acceptance in an installed browser (automation origin denied).
 - External third-party CDN streams and multi-gigabyte stress.
 - Firefox/Opera/Brave/Vivaldi runtime compatibility; not claimed by this release.
-- VS Code Marketplace/Open VSX, Windows desktop, Android, iOS/macOS/Linux deliverables;
-  these remain separate phases and are not part of the v0.6.7 browser release.
+- VS Code Marketplace/Open VSX publication, public Marketplace listing, non-Windows
+  extension-host activation, and a signed installer. The VSIX is a local package,
+  not a Marketplace submission.
+- Windows desktop, Android, iOS/macOS/Linux deliverables; these remain separate
+  phases and are not part of the v0.6.7 browser release.
 
 **NOT CLAIMED**
-- Store approval, public publication, Firefox/Safari compatibility, mobile/desktop
-  installers, or a 100% complete multiplatform family.
+- Store approval, public publication, Firefox/Safari compatibility, Marketplace
+  approval, mobile/desktop installers, or a 100% complete multiplatform family.

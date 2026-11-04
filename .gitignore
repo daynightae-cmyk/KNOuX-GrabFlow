@@ -1,9 +1,11 @@
 node_modules/
 .vscode/
+.vscode-test/
 *.crx
 *.pem
 __pycache__/
 .DS_Store
+dist/
 
 # Local debug captures; QA evidence is written with edge-*/real-mv3-* names by the suites.
 screenshots/edge-diag-*.png

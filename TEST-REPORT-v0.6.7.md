@@ -119,12 +119,15 @@ No security control was relaxed to make the wording truthful.
 ## Release artifacts
 
 Built from the v0.6.7 working tree with `python scripts/package.py`, deterministic
-`ZIP_STORED`, 12 whitelisted extension files, CRCs verified:
+`ZIP_STORED`, 12 whitelisted extension files, CRCs verified. The packages were
+rebuilt after the SonarCloud duplication fix (translation labels are now declared
+once per row instead of duplicated in the EN and AR dictionaries); behaviour is
+unchanged.
 
 | Artifact | Bytes | SHA-256 |
 |---|---:|---|
-| `KNOuX-GrabFlow-CHROME-v0.6.7.zip` | 167,458 | `cbdfbe26f6a30657394eae8c5f592d9f33b8af05ee3834e2d4e7616519ee9519` |
-| `KNOuX-GrabFlow-EDGE-v0.6.7.zip` | 167,458 | `cbdfbe26f6a30657394eae8c5f592d9f33b8af05ee3834e2d4e7616519ee9519` |
+| `KNOuX-GrabFlow-CHROME-v0.6.7.zip` | 167,640 | `313f4d2c4b62fb8304af173198814218caec6cc9f92df4de2bbb2ab0b713e028` |
+| `KNOuX-GrabFlow-EDGE-v0.6.7.zip` | 167,640 | `313f4d2c4b62fb8304af173198814218caec6cc9f92df4de2bbb2ab0b713e028` |
 
 The two browser packages carry the same payload. The ZIPs do **not** contain FFmpeg,
 FFprobe or the Python companion host; HLS/DASH assembly still requires the separately
@@ -141,6 +144,21 @@ changes intact.
 
 The untracked `KNOuX-GrabFlow-CHROME-v0.6.2.zip` and `v0.6.2/` in the main checkout
 were also left untouched.
+
+## CI gate addendum — 2026-11-04
+
+The first PR run (`41882205470`) failed only on the GitHub artifact storage quota
+(`Failed to CreateArtifact`) after every test program passed. The three
+`actions/upload-artifact@v4` steps now set `continue-on-error: true`, so external
+storage quota cannot mask test results; the test commands themselves are unchanged.
+
+SonarCloud reported 3.3% duplication on new code (gate: ≤3%). The duplicated block
+was the five new Inspector labels repeated in both the EN and AR dictionaries. They
+are now declared once in `metadataLabelRows` with both translations per row. A repeat
+live Edge run after the refactor passed with the same Inspector labels and audit text,
+producing a 1,043,290-byte / 16.04-second H.264/AAC MP4 with 8 progress samples
+(sample count varies with timing); the earlier 1,042,878-byte run above remains the
+first recorded live evidence.
 
 ## Honest verification boundary
 

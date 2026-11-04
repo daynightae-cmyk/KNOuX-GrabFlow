@@ -64,6 +64,9 @@ jobs:
           cp ../KNOuX-GrabFlow-CHROME-v*.zip ../KNOuX-GrabFlow-EDGE-v*.zip artifacts/
           cp RELEASE_CHECKSUMS-*.sha256 artifacts/
       - uses: actions/upload-artifact@v4
+        # Artifact storage quota is external to the test contract; never let
+        # an upload failure mask passing build or runtime evidence.
+        continue-on-error: true
         with:
           name: KNOuX-GrabFlow-packages
           path: artifacts/*
@@ -114,6 +117,8 @@ jobs:
       - name: Upload Edge evidence screenshots
         if: always()
         uses: actions/upload-artifact@v4
+        # External storage quota must not turn passing runtime QA into a failure.
+        continue-on-error: true
         with:
           name: edge-runtime-evidence
           path: screenshots/edge-*.png
@@ -142,6 +147,8 @@ jobs:
       - name: Upload assembly evidence
         if: always()
         uses: actions/upload-artifact@v4
+        # External storage quota must not turn passing assembly into a failure.
+        continue-on-error: true
         with:
           name: edge-native-assembly-evidence
           path: screenshots/edge-native-*.png

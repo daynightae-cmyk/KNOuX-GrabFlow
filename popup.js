@@ -53,11 +53,6 @@ const dictionary = {
     inspectFailed: 'The companion could not read this stream.',
     inspectDuration: 'Duration', inspectBitrate: 'Bitrate', inspectTracks: 'Tracks',
     inspectContainer: 'Container', inspectSize: 'Media size', inspectHosts: 'Source hosts',
-    inspectManifestSize: 'Playlist file size',
-    inspectSizeUnknown: 'Unknown until assembled or downloaded',
-    inspectBitrateUnavailable: 'Not available',
-    inspectUnknown: 'Unknown',
-    inspectResolution: 'Resolution', inspectCodec: 'Codec',
     inspectDrm: 'Encryption/DRM suspected — assembly will be refused.',
     auditPassed: n => `Nested audit passed: ${n} references checked`,
     auditUnavailable: 'Nested audit unavailable — FFmpeg transport whitelist still enforced.',
@@ -109,11 +104,6 @@ const dictionary = {
     inspectFailed: 'لم يستطع المساعد قراءة هذا البث.',
     inspectDuration: 'المدة', inspectBitrate: 'معدل البيانات', inspectTracks: 'المسارات',
     inspectContainer: 'الحاوية', inspectSize: 'حجم الوسائط', inspectHosts: 'مصادر الاستضافة',
-    inspectManifestSize: 'حجم ملف قائمة التشغيل',
-    inspectSizeUnknown: 'غير معروف حتى يتم التجميع أو التنزيل',
-    inspectBitrateUnavailable: 'غير متاح',
-    inspectUnknown: 'غير معروف',
-    inspectResolution: 'الدقة', inspectCodec: 'الترميز',
     inspectDrm: 'يُشتبه بتشفير/DRM — سيرفض التجميع.',
     auditPassed: n => `اكتمل التدقيق الداخلي: تم فحص ${n} مرجعًا`,
     auditUnavailable: 'التدقيق الداخلي غير متاح — قائمة بروتوكولات FFmpeg ما زالت مطبقة.',
@@ -125,6 +115,21 @@ const dictionary = {
     percentOf: (done, total) => `${formatBytesStatic(done)} / ${formatBytesStatic(total)}`
   }
 };
+
+// Metadata labels are declared once per row with both translations, so the
+// English and Arabic dictionaries do not repeat the same key structure.
+const metadataLabelRows = [
+  ['inspectManifestSize', 'Playlist file size', 'حجم ملف قائمة التشغيل'],
+  ['inspectSizeUnknown', 'Unknown until assembled or downloaded', 'غير معروف حتى يتم التجميع أو التنزيل'],
+  ['inspectBitrateUnavailable', 'Not available', 'غير متاح'],
+  ['inspectUnknown', 'Unknown', 'غير معروف'],
+  ['inspectResolution', 'Resolution', 'الدقة'],
+  ['inspectCodec', 'Codec', 'الترميز']
+];
+for (const [key, english, arabic] of metadataLabelRows) {
+  dictionary.en[key] = english;
+  dictionary.ar[key] = arabic;
+}
 
 const state = {
   lang: 'en',

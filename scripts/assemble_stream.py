@@ -8,12 +8,13 @@ import argparse
 import ipaddress
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import socket
 import subprocess
 import sys
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 # Same confinement the native companion host applies, so the manual CLI cannot
 # become the weaker path to the same FFmpeg.
@@ -96,10 +97,37 @@ def make_command(ffmpeg: str, url: str, output: Path):
             '-movflags', '+faststart', '-n', str(output)]
 
 
+# A playlist URL handed to FFmpeg is restricted to the characters that appear in
+# real manifests. Quotes, whitespace, backslashes and control characters are not
+# in the class, so an argument that tries to become something other than a URL
+# cannot pass.
+SAFE_PLAYLIST_URL = re.compile(r"^https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]{1,2048}$")
+
+
+def canonical_playlist_url(url: str) -> str:
+    """Return the URL re-serialised from a parsed, allowlisted form.
+
+    The value handed to the child process is constructed here from components
+    that have been checked individually, rather than forwarded from the command
+    line as-is.
+    """
+    if not isinstance(url, str) or not SAFE_PLAYLIST_URL.fullmatch(url):
+        raise ValueError('Playlist URL contains characters that are not permitted')
+    parts = urlsplit(url)
+    if parts.scheme not in ('http', 'https') or not parts.hostname:
+        raise ValueError('Playlist URL must be http(s) and carry a host')
+    if parts.username or parts.password:
+        raise ValueError('Refusing a playlist URL with embedded credentials')
+    rebuilt = urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query, parts.fragment))
+    if rebuilt != url:
+        raise ValueError('Playlist URL is not in canonical form')
+    return rebuilt
+
+
 def assert_argv_safe(argv) -> list:
     """Refuse an argument vector that could be read as something it is not.
 
-    `--url` and `--ffmpeg` are operator input. Even though no shell is involved,
+    `--ffmpeg` and `--url` are operator input. Even though no shell is involved,
     an option-like value or an embedded NUL would change what FFmpeg does rather
     than what it reads, so both are rejected here, immediately before the child
     process is started, rather than only at parse time.
@@ -117,12 +145,12 @@ def assert_argv_safe(argv) -> list:
 
 
 def run_assembly(ffmpeg: str, playlist_url: str, output: Path):
-    """The single place a child process is started, from validated values only."""
-    if not playlist_url.startswith(('http://', 'https://')):
-        raise ValueError('Refusing to hand a non-HTTP URL to FFmpeg')
-    if playlist_url.startswith('-'):
-        raise ValueError('Refusing an option-like URL')
-    argv = assert_argv_safe(make_command(ffmpeg, playlist_url, output))
+    """The single place a child process is started, from checked values only."""
+    safe_url = canonical_playlist_url(playlist_url)
+    executable = Path(ffmpeg)
+    if not executable.is_absolute() or not executable.is_file():
+        raise ValueError('Refusing to run FFmpeg from a non-absolute or missing path')
+    argv = assert_argv_safe(make_command(str(executable), safe_url, output))
     return subprocess.run(argv, check=False, timeout=ASSEMBLY_TIMEOUT, shell=False)
 
 

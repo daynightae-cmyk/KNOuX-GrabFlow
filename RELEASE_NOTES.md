@@ -1,11 +1,10 @@
-# KNOuX GrabFlow v0.6.5 — Full Edition release notes
+# KNOuX GrabFlow — Full Edition release notes
 
-**Status: release candidate with real Edge 156 runtime evidence. Not a store-approved release.**
+**Status: upload-ready release candidate with real Edge 156 runtime evidence and a passing store-manifest validation. Not a store-approved release.**
 
-Version 0.6.5 is the release-closure build. 0.6.4 was superseded before any publication: the bootstrap error handler below changed a packaged file after 0.6.4 had been hashed, so the version moved rather than reusing a label. The v0.6.3 engineering build was merged as `dc7b0fd`
-and its artifacts were hashed; source then changed again to close the SonarCloud findings, so the
-version was bumped rather than reusing a label whose bytes no longer match. See
-`TEST-REPORT-v0.6.4-EDGE-FULL.md` for the exact artifact provenance.
+Current version: **0.6.6**. Earlier candidates (0.6.4, 0.6.5) were superseded before any publication, each because a packaged file changed after the previous version had been hashed. Version labels are never reused for different bytes. The v0.6.3 engineering build was merged as `dc7b0fd`; source then changed to close the
+SonarCloud findings, then to fix the store manifest limits, so the version moved with the bytes
+each time. See `TEST-REPORT-EDGE-FULL.md` for the exact artifact provenance.
 
 Baseline: `main` at `0f836e6a4e160b2b0f8f921a2ca9cc7bcd66c56f` (v0.6.1 tracked source).
 This branch reconciles the v0.6.2 Edge QA candidate into the tracked source and advances it.

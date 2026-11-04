@@ -38,6 +38,56 @@ if not DEST.is_dir():
 
 VERSION = MANIFEST['version']
 
+# Store manifest limits. Edge rejected a real submission with
+# "The string KNOuX GrabFlow has exceeded the maximum length of 12" on
+# short_name, and the description was over the 132 limit in both locales. These
+# are hard package-validation rules, so they are enforced here rather than
+# discovered in a dashboard after upload.
+STORE_LIMITS = {'name': 75, 'short_name': 12, 'description': 132}
+
+
+def validate_store_manifest():
+    problems = []
+    short_name = MANIFEST.get('short_name', '')
+    if len(short_name) > STORE_LIMITS['short_name']:
+        problems.append(
+            f"short_name is {len(short_name)} chars, limit {STORE_LIMITS['short_name']}: {short_name!r}")
+    default_locale = MANIFEST.get('default_locale')
+    if not default_locale:
+        problems.append('default_locale is required while _locales are shipped')
+    locales_root = ROOT / '_locales'
+    locale_dirs = sorted(p.name for p in locales_root.iterdir() if p.is_dir()) \
+        if locales_root.is_dir() else []
+    if default_locale and default_locale not in locale_dirs:
+        problems.append(f'default_locale {default_locale!r} has no _locales directory')
+    for locale in locale_dirs:
+        path = locales_root / locale / 'messages.json'
+        if not path.is_file():
+            problems.append(f'{locale}: messages.json is missing')
+            continue
+        messages = json.loads(path.read_text(encoding='utf-8'))
+        for key, limit_key in (('appName', 'name'), ('appDesc', 'description')):
+            value = ((messages.get(key) or {}).get('message') or '').strip()
+            if not value:
+                problems.append(f'{locale}: {key} is empty')
+                continue
+            limit = STORE_LIMITS[limit_key]
+            if len(value) > limit:
+                problems.append(
+                    f'{locale}: {key} is {len(value)} chars, limit {limit} ({len(value) - limit} over)')
+    return problems
+
+
+store_problems = validate_store_manifest()
+if store_problems:
+    print('STORE MANIFEST VALIDATION FAILED:', file=sys.stderr)
+    for problem in store_problems:
+        print(f'  - {problem}', file=sys.stderr)
+    sys.exit(1)
+print('STORE MANIFEST VALIDATION OK '
+      f"(short_name {len(MANIFEST.get('short_name', ''))}/{STORE_LIMITS['short_name']}, "
+      f"locales: {', '.join(sorted(p.name for p in (ROOT / '_locales').iterdir() if p.is_dir()))})")
+
 
 def build(target_name: str) -> Path:
     out = DEST / f"{target_name}-v{VERSION}.zip"

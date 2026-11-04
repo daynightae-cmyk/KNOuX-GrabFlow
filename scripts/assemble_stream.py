@@ -144,6 +144,30 @@ def assert_argv_safe(argv) -> list:
     return checked
 
 
+def audit_playlist(playlist_url: str, allow_local: bool) -> None:
+    """Apply the same nested-reference audit the native companion host applies.
+
+    Without this the command-line path was the weaker route to the same FFmpeg:
+    a public playlist whose keys or segments point at a private address would
+    have gone unaudited. A policy breach raises; a transport limitation only
+    warns, because failing to fetch is not evidence of an attack.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from companion_host import (fetch_manifest, audit_nested_urls,
+                                MediaPolicyError, MediaFetchError)
+    try:
+        text, effective = fetch_manifest(playlist_url, allow_local=allow_local)
+        findings = audit_nested_urls(text, effective, allow_local=allow_local)
+    except MediaPolicyError:
+        raise
+    except (MediaFetchError, OSError, UnicodeDecodeError) as exc:
+        print(f'NOTE: nested-reference audit unavailable ({exc}); '
+              'FFmpeg protocol and extension whitelists still apply.', flush=True)
+        return
+    print(f'Audited {findings["checked"]} nested reference(s) across '
+          f'{len(findings["hosts"])} host(s); all public.', flush=True)
+
+
 def run_assembly(ffmpeg: str, playlist_url: str, output: Path):
     """The single place a child process is started, from checked values only."""
     safe_url = canonical_playlist_url(playlist_url)
@@ -181,6 +205,7 @@ def main():
                               'note': 'This URL is a playlist, not an MP4 file.'}, ensure_ascii=False))
             return 0
         print('Assembling stream into a single playable media file; no overwrite enabled.', flush=True)
+        audit_playlist(a.url, a.allow_local)
         result = run_assembly(ffmpeg, a.url, a.output)
         if result.returncode:
             print('FFmpeg failed (possibly unavailable segments, codec mismatch, DRM or network error).', flush=True)

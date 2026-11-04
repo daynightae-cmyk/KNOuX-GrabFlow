@@ -156,11 +156,14 @@ test('mock-host activation registers all three commands', async () => {
   const stub = vscodeStub();
   const extension = loadExtension(stub);
   extension.activate(stub.context);
-  assert.deepEqual([...stub.commands.keys()].sort(), [
-    'knouxGrabflow.assembleStream',
-    'knouxGrabflow.generateFfmpegCommand',
-    'knouxGrabflow.inspectMedia'
-  ]);
+  assert.deepEqual(
+    [...stub.commands.keys()].sort((a, b) => a.localeCompare(b)),
+    [
+      'knouxGrabflow.assembleStream',
+      'knouxGrabflow.generateFfmpegCommand',
+      'knouxGrabflow.inspectMedia'
+    ]
+  );
   const text = await new Promise(resolve => {
     const original = stub.api.window.showInputBox;
     stub.api.window.showInputBox = async () => 'https://example.com/live.m3u8';
@@ -177,7 +180,8 @@ test('mock-host activation registers all three commands', async () => {
 
 (async () => {
   let passed = 0;
-  for (const [name, fn] of tests) {
+  await tests.reduce(async (previous, [name, fn]) => {
+    await previous;
     try {
       await fn();
       console.log('PASS', name);
@@ -186,7 +190,7 @@ test('mock-host activation registers all three commands', async () => {
       console.error('FAIL', name);
       throw error;
     }
-  }
+  }, Promise.resolve());
   console.log(`${passed} VS Code companion contract checks passed.`);
 })().catch(error => {
   console.error(error);

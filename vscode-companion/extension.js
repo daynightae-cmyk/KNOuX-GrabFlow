@@ -83,8 +83,8 @@ function ffmpegCandidates() {
       local && path.join(local, 'Programs', 'ffmpeg', 'bin', 'ffmpeg.exe'),
       local && path.join(local, 'Microsoft', 'WinGet', 'Links', 'ffmpeg.exe'),
       process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'ffmpeg', 'bin', 'ffmpeg.exe'),
-      'C:\\ffmpeg\\bin\\ffmpeg.exe',
-      'C:\\ProgramData\\chocolatey\\bin\\ffmpeg.exe',
+      String.raw`C:\ffmpeg\bin\ffmpeg.exe`,
+      String.raw`C:\ProgramData\chocolatey\bin\ffmpeg.exe`,
       profile && path.join(profile, 'scoop', 'apps', 'ffmpeg', 'current', 'bin', 'ffmpeg.exe'),
     ].filter(Boolean);
   }
@@ -102,8 +102,10 @@ function resolveCompanionScript(config) {
   const configured = String(config.get('companionScriptPath', '') || '').trim();
   const candidates = [];
   if (configured && path.isAbsolute(configured)) candidates.push(configured);
-  candidates.push(path.join(__dirname, 'companion', 'assemble_stream.py'));
-  candidates.push(path.resolve(__dirname, '..', 'scripts', 'assemble_stream.py'));
+  candidates.push(
+    path.join(__dirname, 'companion', 'assemble_stream.py'),
+    path.resolve(__dirname, '..', 'scripts', 'assemble_stream.py')
+  );
   const script = candidates.find(candidate =>
     path.basename(candidate).toLowerCase() === 'assemble_stream.py' && isExecutableFile(candidate));
   if (!script) return null;
@@ -191,7 +193,7 @@ function activate(context) {
     });
     if (!url || !url.trim()) return;
 
-    const workspaceFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     const defaultUri = workspaceFolder
       ? vscode.Uri.joinPath(workspaceFolder.uri, 'output.mp4')
       : undefined;

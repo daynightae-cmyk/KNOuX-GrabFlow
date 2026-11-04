@@ -169,6 +169,19 @@ def validate_kit_text(document):
     print(f"KIT_OK required sections and non-claims present ({len(document)} chars)")
 
 
+def confined(value, base, label):
+    """Resolve a CLI-supplied path and keep it inside ``base``.
+
+    The kit and assets directories are operator input, not trusted file paths.
+    Resolving first and rejecting anything that escapes the repository root
+    closes the path-traversal route before any file is opened.
+    """
+    resolved = Path(value).resolve()
+    if not resolved.is_relative_to(base.resolve()):
+        fail(f"{label} must stay inside {base}: {value}")
+    return resolved
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -183,14 +196,15 @@ def main():
     )
     args = parser.parse_args()
 
-    kit_path = Path(args.kit)
+    kit_path = confined(args.kit, ROOT, "--kit")
+    assets_dir = confined(args.assets, ROOT, "--assets")
     if not kit_path.is_file():
         fail(f"missing kit: {kit_path}")
     document = kit_path.read_text(encoding="utf-8")
     validate_listing(document)
     validate_kit_text(document)
     validate_manifest_and_checksums()
-    validate_assets(Path(args.assets))
+    validate_assets(assets_dir)
     print("STORE_KIT_VALID")
 
 

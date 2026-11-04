@@ -163,8 +163,8 @@ tag, the browser source or the browser package hash.
   proprietary `LICENSE.txt`, repository/homepage, keywords, `files` allowlist and
   four settings.
 - `python scripts/package-vscode.py` produced
-  `KNOuX-GrabFlow-VSCODE-v0.6.7.vsix` (58,599 bytes; SHA-256
-  `825338aa9cc9762518c1cc878c6feb5a2cf6fe82e5dcd35094057159bde3f67f`).
+  `KNOuX-GrabFlow-VSCODE-v0.6.7.vsix` (58,602 bytes; SHA-256
+  `2c8e1f7c93dcd383ddcd67f2f625712eb1d0d4fb46fcca684142681e81d518df`).
 - The VSIX contains exactly 10 entries: manifest/content types, `package.json`,
   `extension.js`, `readme.md`, `changelog.md`, `LICENSE.txt`, the 128×128 icon,
   and the bundled `companion/assemble_stream.py` + `companion/companion_host.py`.

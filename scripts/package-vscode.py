@@ -17,8 +17,9 @@ import tempfile
 ROOT = Path(__file__).resolve().parent.parent
 EXT = ROOT / "vscode-companion"
 DIST = ROOT / "dist"
+PACKAGE_JSON = "package.json"
 VERSION = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))["version"]
-PACKAGE = json.loads((EXT / "package.json").read_text(encoding="utf-8"))
+PACKAGE = json.loads((EXT / PACKAGE_JSON).read_text(encoding="utf-8"))
 RUNTIME_FILES = [
     "extension.js",
     "README.md",
@@ -47,7 +48,7 @@ def fail(message):
 
 
 def copy_runtime(staging):
-    shutil.copy2(EXT / "package.json", staging / "package.json")
+    shutil.copy2(EXT / PACKAGE_JSON, staging / PACKAGE_JSON)
     for relative in RUNTIME_FILES:
         source = EXT / relative
         target = staging / relative
@@ -64,7 +65,7 @@ def copy_runtime(staging):
             fail(f"missing or unsafe bundled helper: {source}")
         shutil.copy2(source, helper_dir / name)
 
-    for relative in json.loads((staging / "package.json").read_text(encoding="utf-8"))["files"]:
+    for relative in json.loads((staging / PACKAGE_JSON).read_text(encoding="utf-8"))["files"]:
         if not (staging / relative).is_file():
             fail(f"package.json files entry is absent from staging: {relative}")
 
@@ -107,7 +108,7 @@ def package(staging, vsix):
         fail(f"vsce did not create {vsix}")
 
 
-def verify(vsix, staging):
+def verify(vsix):
     with ZipFile(vsix) as archive:
         bad = archive.testzip()
         if bad is not None:
@@ -143,7 +144,7 @@ def main():
         staging = Path(temporary)
         copy_runtime(staging)
         package(staging, vsix)
-        verify(vsix, staging)
+        verify(vsix)
     digest = hashlib.sha256(vsix.read_bytes()).hexdigest()
     checksum = vsix.with_suffix(vsix.suffix + ".sha256")
     if checksum.exists():

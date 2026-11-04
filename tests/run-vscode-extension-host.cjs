@@ -31,7 +31,7 @@ async function main() {
   } catch (error) {
     console.error('BLOCKED: @vscode/test-electron is not installed in this environment.');
     console.error('Install it outside the repository, then set NODE_PATH to its node_modules:');
-    console.error('  npm install --prefix D:\\Temp\\knoux-vscode-test @vscode/test-electron@3.1.0');
+    console.error('  npm install --prefix <test-runner-dir> @vscode/test-electron@3.1.0');
     throw error;
   }
 
@@ -64,6 +64,6 @@ async function main() {
 }
 
 main().catch(error => {
-  console.error(error && error.stack ? error.stack : error);
+  console.error(error?.stack ?? error);
   process.exitCode = 1;
 });

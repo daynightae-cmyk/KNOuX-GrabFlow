@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parent.parent
 VERSION = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))["version"]
 EXPECTED_HASH = "313f4d2c4b62fb8304af173198814218caec6cc9f92df4de2bbb2ab0b713e028"
 ASSETS = ROOT / "store-assets" / VERSION
+ASSET_MANIFEST = "ASSET_SHA256.json"
+PACKAGES_DIR = "packages"
 PACKAGES = ["KNOuX-GrabFlow-CHROME-v0.6.7.zip", "KNOuX-GrabFlow-EDGE-v0.6.7.zip"]
 ASSET_FILES = [
     "GrabFlow-v0.6.7-English-1280x800.png",
@@ -25,7 +27,7 @@ ASSET_FILES = [
     "GrabFlow-v0.6.7-Marquee-1400x560.png",
     "GrabFlow-v0.6.7-Logo-300x300.png",
     "GrabFlow-v0.6.7-Icon-128x128.png",
-    "ASSET_SHA256.json",
+    ASSET_MANIFEST,
 ]
 DOCS = [
     ("STORE_SUBMISSION-v0.6.7.md", ROOT / "STORE_SUBMISSION-v0.6.7.md"),
@@ -93,6 +95,58 @@ def copy_unchanged(source, target):
         shutil.copy2(source, target)
 
 
+def validate_kit_document():
+    kit = (ROOT / f"STORE_SUBMISSION-v{VERSION}.md").read_text(encoding="utf-8")
+    if "Status: PREPARED, NOT SUBMITTED, NOT APPROVED, NOT PUBLISHED." not in kit:
+        fail("submission kit lost its non-submission status")
+    if "v0.6.1" in kit and "Do not upload" not in kit:
+        fail("stale v0.6.1 instructions are not clearly rejected")
+
+
+def require_assets():
+    for name in ASSET_FILES:
+        if not (ASSETS / name).is_file():
+            fail(f"missing asset: {ASSETS / name}")
+
+
+def copy_packages(packages, output):
+    lines = []
+    for name in PACKAGES:
+        source = packages / name
+        if not source.is_file():
+            fail(f"missing package: {source}")
+        actual = digest(source)
+        if actual != EXPECTED_HASH:
+            fail(f"package hash differs: {source} {actual}")
+        copy_unchanged(source, output / PACKAGES_DIR / name)
+        lines.append(f"{actual}  {name}")
+    (output / PACKAGES_DIR / "SHA256SUMS-packages.txt").write_text(
+        "\n".join(lines) + "\n", encoding="utf-8"
+    )
+
+
+def copy_assets(output):
+    manifest = json.loads((ASSETS / ASSET_MANIFEST).read_text(encoding="utf-8"))
+    for name in ASSET_FILES:
+        copy_unchanged(ASSETS / name, output / "assets" / name)
+        if name == ASSET_MANIFEST:
+            continue
+        if digest(ASSETS / name) != manifest[name]["sha256"]:
+            fail(f"asset hash differs from manifest: {name}")
+
+
+def write_bundle_checksums(output):
+    files = sorted(
+        path
+        for path in output.rglob("*")
+        if path.is_file() and path.name != "SHA256SUMS.txt"
+    )
+    lines = [f"{digest(path)}  {path.relative_to(output).as_posix()}" for path in files]
+    checksum = output / "SHA256SUMS.txt"
+    checksum.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return checksum, files
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -111,55 +165,20 @@ def main():
     output = Path(args.output).resolve()
     packages = Path(args.packages).resolve()
 
-    kit = (ROOT / f"STORE_SUBMISSION-v{VERSION}.md").read_text(encoding="utf-8")
-    if "Status: PREPARED, NOT SUBMITTED, NOT APPROVED, NOT PUBLISHED." not in kit:
-        fail("submission kit lost its non-submission status")
-    if "v0.6.1" in kit and "Do not upload" not in kit:
-        fail("stale v0.6.1 instructions are not clearly rejected")
-
-    for name in ASSET_FILES:
-        if not (ASSETS / name).is_file():
-            fail(f"missing asset: {ASSETS / name}")
+    validate_kit_document()
+    require_assets()
 
     output.mkdir(parents=True, exist_ok=True)
-    (output / "packages").mkdir(exist_ok=True)
+    (output / PACKAGES_DIR).mkdir(exist_ok=True)
     (output / "assets").mkdir(exist_ok=True)
 
-    package_lines = []
-    for name in PACKAGES:
-        source = packages / name
-        if not source.is_file():
-            fail(f"missing package: {source}")
-        actual = digest(source)
-        if actual != EXPECTED_HASH:
-            fail(f"package hash differs: {source} {actual}")
-        copy_unchanged(source, output / "packages" / name)
-        package_lines.append(f"{actual}  {name}")
-    (output / "packages" / "SHA256SUMS-packages.txt").write_text(
-        "\n".join(package_lines) + "\n", encoding="utf-8"
-    )
-
-    manifest = json.loads((ASSETS / "ASSET_SHA256.json").read_text(encoding="utf-8"))
-    for name in ASSET_FILES:
-        copy_unchanged(ASSETS / name, output / "assets" / name)
-        if name != "ASSET_SHA256.json":
-            if digest(ASSETS / name) != manifest[name]["sha256"]:
-                fail(f"asset hash differs from manifest: {name}")
-
+    copy_packages(packages, output)
+    copy_assets(output)
     for name, source in DOCS:
         copy_unchanged(source, output / name)
     (output / "README-UPLOAD.txt").write_text(UPLOAD_README, encoding="utf-8")
 
-    files = sorted(
-        path for path in output.rglob("*")
-        if path.is_file() and path.name != "SHA256SUMS.txt"
-    )
-    lines = []
-    for path in files:
-        relative = path.relative_to(output).as_posix()
-        lines.append(f"{digest(path)}  {relative}")
-    checksum = output / "SHA256SUMS.txt"
-    checksum.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    checksum, files = write_bundle_checksums(output)
 
     print(f"SUBMISSION_ASSEMBLED {output}")
     print(f"SUBMISSION_FILES {len(files) + 1}")
